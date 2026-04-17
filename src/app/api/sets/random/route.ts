@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     wikipediaUrl: a.wikipediaUrl,
     wikipediaPageId: a.wikipediaPageId,
     categories: JSON.parse(a.categories) as string[],
+    disabledCategories: JSON.parse(a.disabledCategories) as string[],
     customHints: JSON.parse(a.customHints) as string[],
     aliases: JSON.parse(a.aliases) as string[],
     customAliases: JSON.parse(a.customAliases) as string[],

@@ -5,6 +5,7 @@ export type ArticleDTO = {
   wikipediaUrl: string;
   wikipediaPageId: number;
   categories: string[];
+  disabledCategories: string[];
   customHints: string[];
   aliases: string[];
   customAliases: string[];
@@ -24,6 +25,7 @@ export type SetSummary = {
   lastPlayedAt: string | null;
   isMine: boolean;
   canManage: boolean;
+  creatorName: string | null;
 };
 
 export type SetDetail = {
@@ -34,6 +36,7 @@ export type SetDetail = {
   updatedAt: string;
   isMine: boolean;
   canManage: boolean;
+  creatorName: string | null;
   articles: ArticleDTO[];
 };
 
@@ -57,4 +60,10 @@ export type FetchedArticlePreview = {
   aliases: string[];
   summary: string | null;
   thumbnailUrl: string | null;
+};
+
+export type ProfileDTO = {
+  id: string | null;
+  displayName: string | null;
+  hasPassword: boolean;
 };

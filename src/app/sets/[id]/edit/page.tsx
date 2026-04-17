@@ -30,6 +30,7 @@ export default function EditSetPage({
   const [flash, setFlash] = useState<string | null>(null);
   const [pendingHints, setPendingHints] = useState<string[]>([]);
   const [pendingAliases, setPendingAliases] = useState<string[]>([]);
+  const [pendingDisabled, setPendingDisabled] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/sets/${id}`);
@@ -59,6 +60,7 @@ export default function EditSetPage({
     setLastInput(urlOrTitle);
     setPendingHints([]);
     setPendingAliases([]);
+    setPendingDisabled([]);
     try {
       const res = await fetch("/api/wikipedia/fetch", {
         method: "POST",
@@ -94,14 +96,21 @@ export default function EditSetPage({
         return;
       }
       let article = (await res.json()) as ArticleDTO;
-      if (pendingHints.length > 0 || pendingAliases.length > 0) {
+      const needsPatch =
+        pendingHints.length > 0 ||
+        pendingAliases.length > 0 ||
+        pendingDisabled.length > 0;
+      if (needsPatch) {
         const patchBody: {
           customHints?: string[];
           customAliases?: string[];
+          disabledCategories?: string[];
         } = {};
         if (pendingHints.length > 0) patchBody.customHints = pendingHints;
         if (pendingAliases.length > 0)
           patchBody.customAliases = pendingAliases;
+        if (pendingDisabled.length > 0)
+          patchBody.disabledCategories = pendingDisabled;
         const patchRes = await fetch(`/api/articles/${article.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -117,6 +126,7 @@ export default function EditSetPage({
       setPreview(null);
       setPendingHints([]);
       setPendingAliases([]);
+      setPendingDisabled([]);
       setFlash(`Added “${article.title}”`);
       setTimeout(() => setFlash(null), 2000);
     } finally {
@@ -264,11 +274,14 @@ export default function EditSetPage({
             onHintsChange={setPendingHints}
             aliases={pendingAliases}
             onAliasesChange={setPendingAliases}
+            disabled={pendingDisabled}
+            onDisabledChange={setPendingDisabled}
             onConfirm={confirmAdd}
             onCancel={() => {
               setPreview(null);
               setPendingHints([]);
               setPendingAliases([]);
+              setPendingDisabled([]);
             }}
             saving={saving}
           />

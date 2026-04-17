@@ -21,6 +21,16 @@ export async function GET() {
     isAdmin(),
   ]);
 
+  // Batch-load creator display names.
+  const ownerIds = Array.from(new Set(sets.map((s) => s.ownerId)));
+  const users = ownerIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: ownerIds } },
+        select: { id: true, displayName: true },
+      })
+    : [];
+  const nameById = new Map(users.map((u) => [u.id, u.displayName ?? null]));
+
   const shaped = sets.map((s) => ({
     id: s.id,
     name: s.name,
@@ -32,6 +42,7 @@ export async function GET() {
     isMine: ownerId !== null && s.ownerId === ownerId,
     canManage:
       admin || (ownerId !== null && s.ownerId === ownerId),
+    creatorName: nameById.get(s.ownerId) ?? null,
   }));
   return Response.json(shaped);
 }

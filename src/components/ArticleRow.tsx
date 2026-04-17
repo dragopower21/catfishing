@@ -9,6 +9,7 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import type { ArticleDTO } from "@/lib/types";
@@ -35,6 +36,7 @@ export default function ArticleRow({
 
   async function patch(body: {
     categories?: string[];
+    disabledCategories?: string[];
     customHints?: string[];
     customAliases?: string[];
   }) {
@@ -58,10 +60,14 @@ export default function ArticleRow({
     }
   }
 
-  async function removeCategory(cat: string) {
-    await patch({
-      categories: article.categories.filter((c) => c !== cat),
-    });
+  async function toggleCategory(cat: string) {
+    const disabled = new Set(article.disabledCategories);
+    if (disabled.has(cat)) {
+      disabled.delete(cat);
+    } else {
+      disabled.add(cat);
+    }
+    await patch({ disabledCategories: Array.from(disabled) });
   }
 
   async function removeHint(hint: string) {
@@ -153,7 +159,16 @@ export default function ArticleRow({
             />
           </a>
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            {article.categories.length} categories
+            {article.categories.length - article.disabledCategories.length}{" "}
+            categories
+            {article.disabledCategories.length > 0 && (
+              <>
+                {" · "}
+                <span className="text-slate-400">
+                  {article.disabledCategories.length} off
+                </span>
+              </>
+            )}
             {article.customHints.length > 0 && (
               <>
                 {" · "}
@@ -330,7 +345,10 @@ export default function ArticleRow({
 
           <div className="mt-5 flex items-center justify-between">
             <div className="text-xs font-extrabold uppercase tracking-widest text-slate-600">
-              Wikipedia categories
+              Wikipedia categories{" "}
+              <span className="font-medium text-slate-400 normal-case tracking-normal">
+                — disabled ones are hidden in-game
+              </span>
             </div>
             <button
               type="button"
@@ -352,26 +370,40 @@ export default function ArticleRow({
           <div className="mt-2 flex flex-wrap gap-1.5">
             {article.categories.length === 0 ? (
               <span className="text-sm italic text-slate-500">
-                No categories kept. Click &quot;Reset&quot; to restore.
+                No categories stored. Click &quot;Reset&quot; to re-fetch.
               </span>
             ) : (
-              article.categories.map((c) => (
-                <span
-                  key={c}
-                  className="inline-flex items-center gap-1.5 rounded-full border-[2.5px] border-slate-900 bg-white px-3 py-1 text-xs font-bold text-slate-900"
-                >
-                  {c}
+              article.categories.map((c) => {
+                const isDisabled = article.disabledCategories.includes(c);
+                return (
                   <button
+                    key={c}
                     type="button"
-                    onClick={() => removeCategory(c)}
+                    onClick={() => toggleCategory(c)}
                     disabled={busy}
-                    className="brut-btn-chip bg-accent-red/20"
-                    aria-label={`Remove ${c}`}
+                    aria-pressed={isDisabled}
+                    title={
+                      isDisabled
+                        ? "Click to re-enable"
+                        : "Click to disable (can toggle back on)"
+                    }
+                    className={`inline-flex items-center gap-1.5 rounded-full border-[2.5px] px-3 py-1 text-xs font-bold transition ${
+                      isDisabled
+                        ? "border-slate-300 bg-slate-100 text-slate-400"
+                        : "border-slate-900 bg-white text-slate-900 hover:bg-paper"
+                    }`}
                   >
-                    <X className="h-3 w-3" strokeWidth={3} />
+                    <span className={isDisabled ? "line-through" : undefined}>
+                      {c}
+                    </span>
+                    {isDisabled ? (
+                      <Undo2 className="h-3 w-3" strokeWidth={3} />
+                    ) : (
+                      <X className="h-3 w-3" strokeWidth={3} />
+                    )}
                   </button>
-                </span>
-              ))
+                );
+              })
             )}
           </div>
         </div>

@@ -44,6 +44,7 @@ export async function POST(request: Request, { params }: Ctx) {
     where: { id },
     data: {
       categories: JSON.stringify(filtered),
+      disabledCategories: JSON.stringify([]),
       aliases: JSON.stringify(fetched.aliases),
       summary: fetched.summary,
       thumbnailUrl: fetched.thumbnailUrl,
@@ -62,6 +63,7 @@ export async function POST(request: Request, { params }: Ctx) {
     wikipediaUrl: updated.wikipediaUrl,
     wikipediaPageId: updated.wikipediaPageId,
     categories: filtered,
+    disabledCategories: [],
     customHints: JSON.parse(updated.customHints) as string[],
     aliases: fetched.aliases,
     customAliases: JSON.parse(updated.customAliases) as string[],

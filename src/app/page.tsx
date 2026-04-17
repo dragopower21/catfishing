@@ -41,6 +41,15 @@ export default function DashboardPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onProfileChange = () => {
+      load();
+    };
+    window.addEventListener("profile:changed", onProfileChange);
+    return () =>
+      window.removeEventListener("profile:changed", onProfileChange);
+  }, [load]);
+
   async function handleDelete(id: string) {
     const s = sets?.find((x) => x.id === id);
     const ok = confirm(

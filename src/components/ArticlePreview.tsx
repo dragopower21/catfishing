@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  RotateCcw,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -17,6 +18,8 @@ type Props = {
   onHintsChange: (hints: string[]) => void;
   aliases: string[];
   onAliasesChange: (aliases: string[]) => void;
+  disabled: string[];
+  onDisabledChange: (disabled: string[]) => void;
   onConfirm: () => void;
   onCancel: () => void;
   saving?: boolean;
@@ -28,6 +31,8 @@ export default function ArticlePreview({
   onHintsChange,
   aliases,
   onAliasesChange,
+  disabled,
+  onDisabledChange,
   onConfirm,
   onCancel,
   saving = false,
@@ -35,7 +40,10 @@ export default function ArticlePreview({
   const [hintDraft, setHintDraft] = useState("");
   const [aliasDraft, setAliasDraft] = useState("");
   const [showWikipediaAliases, setShowWikipediaAliases] = useState(false);
-  const tooFew = preview.categories.length < 3;
+
+  const disabledSet = new Set(disabled);
+  const enabledCount = preview.categories.length - disabledSet.size;
+  const tooFew = enabledCount < 3;
 
   function addHint() {
     const h = hintDraft.trim();
@@ -57,6 +65,14 @@ export default function ArticlePreview({
 
   function removeAlias(a: string) {
     onAliasesChange(aliases.filter((x) => x !== a));
+  }
+
+  function toggleDisabled(cat: string) {
+    if (disabledSet.has(cat)) {
+      onDisabledChange(disabled.filter((x) => x !== cat));
+    } else {
+      onDisabledChange([...disabled, cat]);
+    }
   }
 
   return (
@@ -87,9 +103,8 @@ export default function ArticlePreview({
               {preview.title}
             </a>
             <div className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-              {preview.categories.length} useful ·{" "}
-              {preview.rawCategoryCount} total · {preview.aliases.length}{" "}
-              aliases
+              {enabledCount} active · {preview.rawCategoryCount} total ·{" "}
+              {preview.aliases.length} aliases
             </div>
           </div>
         </div>
@@ -107,15 +122,18 @@ export default function ArticlePreview({
               strokeWidth={2.5}
             />
             <span>
-              Only {preview.categories.length} useful{" "}
-              {preview.categories.length === 1 ? "category" : "categories"} —
-              it may be too easy or impossible to guess. Add anyway?
+              Only {enabledCount} active{" "}
+              {enabledCount === 1 ? "category" : "categories"} — it may be
+              too easy or impossible to guess. Add anyway?
             </span>
           </div>
         )}
 
         <div className="mt-5 text-xs font-extrabold uppercase tracking-widest text-slate-600">
-          Wikipedia categories
+          Wikipedia categories{" "}
+          <span className="font-medium text-slate-400 normal-case tracking-normal">
+            — click × to disable, × again to re-enable
+          </span>
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {preview.categories.length === 0 ? (
@@ -123,14 +141,17 @@ export default function ArticlePreview({
               No useful categories after filtering.
             </span>
           ) : (
-            preview.categories.map((c) => (
-              <span
-                key={c}
-                className="rounded-full border-[2.5px] border-slate-900 bg-white px-3 py-1 text-xs font-bold text-slate-900"
-              >
-                {c}
-              </span>
-            ))
+            preview.categories.map((c) => {
+              const isDisabled = disabledSet.has(c);
+              return (
+                <CategoryPill
+                  key={c}
+                  text={c}
+                  disabled={isDisabled}
+                  onToggle={() => toggleDisabled(c)}
+                />
+              );
+            })
           )}
         </div>
 
@@ -268,7 +289,7 @@ export default function ArticlePreview({
             onClick={onConfirm}
             disabled={
               saving ||
-              (preview.categories.length === 0 && hints.length === 0)
+              (enabledCount === 0 && hints.length === 0)
             }
             className="brut-btn bg-accent-yellow text-slate-900"
           >
@@ -278,5 +299,39 @@ export default function ArticlePreview({
         </div>
       </div>
     </div>
+  );
+}
+
+function CategoryPill({
+  text,
+  disabled,
+  onToggle,
+}: {
+  text: string;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`group inline-flex items-center gap-1 rounded-full border-[2.5px] px-3 py-1 text-xs font-bold transition ${
+        disabled
+          ? "border-slate-300 bg-slate-100 text-slate-400"
+          : "border-slate-900 bg-white text-slate-900 hover:bg-paper"
+      }`}
+      aria-pressed={disabled}
+      title={disabled ? "Click to re-enable" : "Click to disable"}
+    >
+      <span className={disabled ? "line-through" : undefined}>{text}</span>
+      {disabled ? (
+        <RotateCcw
+          className="h-3 w-3 text-slate-500 group-hover:text-slate-900"
+          strokeWidth={3}
+        />
+      ) : (
+        <X className="h-3 w-3" strokeWidth={3} />
+      )}
+    </button>
   );
 }

@@ -34,7 +34,14 @@ export async function GET(_req: Request, { params }: Ctx) {
   if (!set) {
     return Response.json({ error: "Set not found" }, { status: 404 });
   }
-  const [ownerId, admin] = await Promise.all([getOwnerId(), isAdmin()]);
+  const [ownerId, admin, owner] = await Promise.all([
+    getOwnerId(),
+    isAdmin(),
+    prisma.user.findUnique({
+      where: { id: set.ownerId },
+      select: { displayName: true },
+    }),
+  ]);
   const articles = set.articles.map((a) => ({
     id: a.id,
     setId: a.setId,
@@ -42,6 +49,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     wikipediaUrl: a.wikipediaUrl,
     wikipediaPageId: a.wikipediaPageId,
     categories: JSON.parse(a.categories) as string[],
+    disabledCategories: JSON.parse(a.disabledCategories) as string[],
     customHints: JSON.parse(a.customHints) as string[],
     aliases: JSON.parse(a.aliases) as string[],
     customAliases: JSON.parse(a.customAliases) as string[],
@@ -58,6 +66,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     updatedAt: set.updatedAt,
     isMine: ownerId !== null && set.ownerId === ownerId,
     canManage: admin || (ownerId !== null && set.ownerId === ownerId),
+    creatorName: owner?.displayName ?? null,
     articles,
   });
 }

@@ -137,13 +137,13 @@ export default function PlayPage({
   }, [articles.length]);
 
   const article = articles[currentIdx];
-  const sortedCategories = useMemo(
-    () =>
-      article
-        ? [...article.categories].sort((a, b) => a.localeCompare(b))
-        : [],
-    [article]
-  );
+  const sortedCategories = useMemo(() => {
+    if (!article) return [];
+    const disabled = new Set(article.disabledCategories);
+    return article.categories
+      .filter((c) => !disabled.has(c))
+      .sort((a, b) => a.localeCompare(b));
+  }, [article]);
 
   const correctCount = results.filter((r) => r.correct).length;
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, Fish, HelpCircle, House } from "lucide-react";
+import ProfileMenu from "@/components/ProfileMenu";
 
 const LINKS = [
   { href: "/", label: "Home", icon: House },
@@ -34,30 +35,33 @@ export default function NavBar() {
           </span>
         </Link>
 
-        <ul className="flex flex-wrap items-center gap-2">
-          {LINKS.map(({ href, label, icon: Icon }) => {
-            const active =
-              href === "/"
-                ? pathname === "/"
-                : pathname === href || pathname.startsWith(`${href}/`);
-            return (
-              <li key={href}>
-                <Link
-                  href={href}
-                  className={`brut-btn brut-btn-sm ${
-                    active
-                      ? "bg-accent-yellow text-slate-900"
-                      : "bg-white text-slate-900"
-                  }`}
-                  aria-current={active ? "page" : undefined}
-                >
-                  <Icon className="h-4 w-4" strokeWidth={2.5} />
-                  <span>{label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="flex flex-wrap items-center gap-2">
+          <ul className="flex flex-wrap items-center gap-2">
+            {LINKS.map(({ href, label, icon: Icon }) => {
+              const active =
+                href === "/"
+                  ? pathname === "/"
+                  : pathname === href || pathname.startsWith(`${href}/`);
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    className={`brut-btn brut-btn-sm ${
+                      active
+                        ? "bg-accent-yellow text-slate-900"
+                        : "bg-white text-slate-900"
+                    }`}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={2.5} />
+                    <span className="hidden sm:inline">{label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <ProfileMenu />
+        </div>
       </div>
     </nav>
   );

@@ -78,8 +78,19 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
         ) : (
           <p className="mt-1 text-sm italic text-slate-400">No description</p>
         )}
-        <div className="mt-4 text-xs font-bold uppercase tracking-wider text-slate-500">
-          Last played · {formatWhen(set.lastPlayedAt)}
+        <div className="mt-4 flex flex-wrap items-center gap-x-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+          <span>Last played · {formatWhen(set.lastPlayedAt)}</span>
+          {set.creatorName && (
+            <>
+              <span aria-hidden>·</span>
+              <span>
+                by{" "}
+                <span className="text-slate-700 normal-case tracking-normal">
+                  {set.creatorName}
+                </span>
+              </span>
+            </>
+          )}
         </div>
       </>
     );

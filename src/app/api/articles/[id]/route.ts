@@ -57,6 +57,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
 
   let body: {
     categories?: unknown;
+    disabledCategories?: unknown;
     customHints?: unknown;
     customAliases?: unknown;
   };
@@ -68,6 +69,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
 
   const data: {
     categories?: string;
+    disabledCategories?: string;
     customHints?: string;
     customAliases?: string;
   } = {};
@@ -85,6 +87,20 @@ export async function PATCH(request: Request, { params }: Ctx) {
       );
     }
     data.categories = JSON.stringify(cats);
+  }
+  if (body.disabledCategories !== undefined) {
+    const disabled = sanitizeStringArray(
+      body.disabledCategories,
+      MAX_CATEGORY,
+      MAX_CATEGORIES_PER_ARTICLE
+    );
+    if (disabled === null) {
+      return Response.json(
+        { error: "disabledCategories must be an array of strings" },
+        { status: 400 }
+      );
+    }
+    data.disabledCategories = JSON.stringify(disabled);
   }
   if (body.customHints !== undefined) {
     const hints = sanitizeStringArray(
@@ -132,6 +148,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
     wikipediaUrl: article.wikipediaUrl,
     wikipediaPageId: article.wikipediaPageId,
     categories: JSON.parse(article.categories) as string[],
+    disabledCategories: JSON.parse(article.disabledCategories) as string[],
     customHints: JSON.parse(article.customHints) as string[],
     aliases: JSON.parse(article.aliases) as string[],
     customAliases: JSON.parse(article.customAliases) as string[],
