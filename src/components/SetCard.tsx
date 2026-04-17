@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Play, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Play, Share2, Trash2 } from "lucide-react";
+import ShareSetModal from "@/components/ShareSetModal";
 import type { SetSummary } from "@/lib/types";
 
 type Props = {
@@ -24,6 +26,7 @@ function formatWhen(iso: string | null): string {
 
 export default function SetCard({ set, onDelete, accentColor }: Props) {
   const router = useRouter();
+  const [shareOpen, setShareOpen] = useState(false);
   const canPlay = set.articleCount > 0;
   const canEdit = set.canManage;
 
@@ -95,6 +98,15 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
         >
           <Play className="h-4 w-4" fill="currentColor" strokeWidth={2.5} /> Play
         </button>
+        <button
+          type="button"
+          onClick={() => setShareOpen(true)}
+          className="brut-btn brut-btn-sm brut-btn-icon bg-accent-pink text-slate-900"
+          aria-label="Share"
+          title="Share this set"
+        >
+          <Share2 className="h-4 w-4" strokeWidth={2.5} />
+        </button>
         {canEdit && (
           <>
             <Link
@@ -115,6 +127,14 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
           </>
         )}
       </div>
+
+      {shareOpen && (
+        <ShareSetModal
+          setName={set.name}
+          setId={set.id}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Dice5, Plus, BookOpen, Fish, Cat, Loader2 } from "lucide-react";
 import SetCard from "@/components/SetCard";
+import SetSearch from "@/components/SetSearch";
 import AdminToggle from "@/components/AdminToggle";
 import type { SetSummary } from "@/lib/types";
 
@@ -198,6 +199,12 @@ export default function DashboardPage() {
           <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
           Loading sets…
         </div>
+      )}
+
+      {sets && sets.length > 0 && (
+        <section className="mt-10">
+          <SetSearch sets={sets} />
+        </section>
       )}
 
       {sets && (
