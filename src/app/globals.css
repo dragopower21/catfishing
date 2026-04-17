@@ -199,6 +199,57 @@
     box-shadow: 2px 2px 0 0 var(--color-ink);
   }
 
+  /* Brutalist range slider */
+  .brut-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 24px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .brut-range::-webkit-slider-runnable-track {
+    height: 10px;
+    background: #fff;
+    border: 3px solid var(--color-ink);
+    border-radius: 4px;
+  }
+  .brut-range::-moz-range-track {
+    height: 10px;
+    background: #fff;
+    border: 3px solid var(--color-ink);
+    border-radius: 4px;
+  }
+  .brut-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 22px;
+    width: 22px;
+    background: var(--color-accent-yellow);
+    border: 3px solid var(--color-ink);
+    border-radius: 5px;
+    margin-top: -9px;
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+    cursor: grab;
+  }
+  .brut-range::-moz-range-thumb {
+    height: 22px;
+    width: 22px;
+    background: var(--color-accent-yellow);
+    border: 3px solid var(--color-ink);
+    border-radius: 5px;
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+    cursor: grab;
+  }
+  .brut-range:disabled::-webkit-slider-thumb {
+    background: #e5e7eb;
+    cursor: not-allowed;
+  }
+  .brut-range:disabled::-moz-range-thumb {
+    background: #e5e7eb;
+    cursor: not-allowed;
+  }
+
   .animate-slide-in {
     animation: slide-in 0.25s ease-out both;
   }

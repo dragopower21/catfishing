@@ -10,12 +10,20 @@ type ToneOpts = {
 
 let ctx: AudioContext | null = null;
 let muted = false;
+let volume = 0.7;
 let didHydrate = false;
 
-function hydrateMute() {
+function hydrateSettings() {
   if (didHydrate || typeof window === "undefined") return;
   try {
     muted = window.localStorage.getItem("cf:mute") === "1";
+    const rawVol = window.localStorage.getItem("cf:vol");
+    if (rawVol !== null) {
+      const parsed = Number.parseFloat(rawVol);
+      if (Number.isFinite(parsed)) {
+        volume = Math.max(0, Math.min(1, parsed));
+      }
+    }
   } catch {
     // ignore
   }
@@ -43,8 +51,8 @@ function ensureCtx(): AudioContext | null {
 }
 
 function tone(freq: number, duration: number, opts: ToneOpts = {}) {
-  hydrateMute();
-  if (muted) return;
+  hydrateSettings();
+  if (muted || volume <= 0) return;
   const c = ensureCtx();
   if (!c) return;
   const {
@@ -54,13 +62,14 @@ function tone(freq: number, duration: number, opts: ToneOpts = {}) {
     offsetMs = 0,
   } = opts;
 
+  const effectiveGain = Math.max(0.0001, gain * volume);
   const start = c.currentTime + offsetMs / 1000;
   const osc = c.createOscillator();
   const g = c.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, start);
   g.gain.setValueAtTime(0, start);
-  g.gain.linearRampToValueAtTime(gain, start + attack);
+  g.gain.linearRampToValueAtTime(effectiveGain, start + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, start + duration);
   osc.connect(g);
   g.connect(c.destination);
@@ -70,7 +79,7 @@ function tone(freq: number, duration: number, opts: ToneOpts = {}) {
 
 export const sound = {
   setMuted(m: boolean) {
-    hydrateMute();
+    hydrateSettings();
     muted = m;
     if (typeof window !== "undefined") {
       try {
@@ -81,8 +90,23 @@ export const sound = {
     }
   },
   isMuted(): boolean {
-    hydrateMute();
+    hydrateSettings();
     return muted;
+  },
+  setVolume(v: number) {
+    hydrateSettings();
+    volume = Math.max(0, Math.min(1, v));
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("cf:vol", String(volume));
+      } catch {
+        // ignore
+      }
+    }
+  },
+  getVolume(): number {
+    hydrateSettings();
+    return volume;
   },
 
   // Tiny tactile click for generic button presses.

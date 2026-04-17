@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Copy, Link2, X } from "lucide-react";
 import { sound } from "@/lib/sound";
 
@@ -13,9 +14,11 @@ type Props = {
 export default function ShareSetModal({ setName, setId, onClose }: Props) {
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    setMounted(true);
   }, []);
 
   useEffect(() => {
@@ -51,7 +54,9 @@ export default function ShareSetModal({ setName, setId, onClose }: Props) {
     }
   }
 
-  return (
+  if (!mounted) return null;
+
+  const content = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4"
       onClick={(e) => {
@@ -118,4 +123,6 @@ export default function ShareSetModal({ setName, setId, onClose }: Props) {
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }
