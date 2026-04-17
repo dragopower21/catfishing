@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, LogIn, LogOut, UserRound } from "lucide-react";
+import {
+  Loader2,
+  LogIn,
+  LogOut,
+  TriangleAlert,
+  UserRound,
+} from "lucide-react";
 import type { ProfileDTO } from "@/lib/types";
 
 type Mode = "closed" | "pick" | "login";
@@ -15,6 +21,7 @@ export default function ProfileMenu() {
   const [nameDraft, setNameDraft] = useState("");
   const [passwordDraft, setPasswordDraft] = useState("");
   const [clearPassword, setClearPassword] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -79,8 +86,19 @@ export default function ProfileMenu() {
       }
       const data = (await res.json()) as ProfileDTO;
       setProfile(data);
-      close();
-      // Refresh dashboard / any reactive bits
+      setPasswordDraft("");
+      setClearPassword(false);
+      if (data.hasPassword) {
+        setFlash(`Saved as ${data.displayName} — password set ✓`);
+      } else {
+        setFlash(
+          `Saved as ${data.displayName} — no password (this name only lives on this device)`
+        );
+      }
+      setTimeout(() => {
+        close();
+        setFlash(null);
+      }, 1400);
       window.dispatchEvent(new CustomEvent("profile:changed"));
     } finally {
       setBusy(false);
@@ -208,6 +226,31 @@ export default function ProfileMenu() {
                     />
                     Remove password (anyone could take the name)
                   </label>
+                )}
+
+                {/* Warning when saving a name without claiming it */}
+                {nameDraft.trim() &&
+                  !passwordDraft &&
+                  !profile?.hasPassword &&
+                  !clearPassword && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border-[2.5px] border-slate-900 bg-accent-yellow p-3 text-xs font-bold text-slate-900">
+                      <TriangleAlert
+                        className="mt-0.5 h-4 w-4 shrink-0"
+                        strokeWidth={2.5}
+                      />
+                      <span>
+                        Without a password, this name only lives on this
+                        browser. You won&rsquo;t be able to sign in on another
+                        device and someone else could claim it. Set a password
+                        to lock it.
+                      </span>
+                    </div>
+                  )}
+
+                {flash && (
+                  <div className="mt-4 rounded-lg border-[2.5px] border-slate-900 bg-accent-green/40 p-2 text-xs font-bold text-slate-900">
+                    {flash}
+                  </div>
                 )}
 
                 {error && (

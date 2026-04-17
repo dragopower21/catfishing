@@ -37,17 +37,23 @@ export async function POST(request: Request) {
   const user = await prisma.user.findUnique({
     where: { displayName: name },
   });
-  if (!user || !user.passwordHash) {
+  if (!user) {
     return Response.json(
-      { error: "No account with that name + password." },
+      { error: "No account found with that name." },
+      { status: 401 }
+    );
+  }
+  if (!user.passwordHash) {
+    return Response.json(
+      {
+        error:
+          "That name has no password. Guest names can't be signed into from another device — open the original device, set a password, then try again.",
+      },
       { status: 401 }
     );
   }
   if (!verifyPassword(password, user.passwordHash)) {
-    return Response.json(
-      { error: "No account with that name + password." },
-      { status: 401 }
-    );
+    return Response.json({ error: "Wrong password." }, { status: 401 });
   }
 
   await replaceOwnerCookie(user.id);
