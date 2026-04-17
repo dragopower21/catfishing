@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
-import { searchWikipedia } from "@/lib/wikipedia";
+import {
+  fetchUsefulCategoryCounts,
+  searchWikipedia,
+} from "@/lib/wikipedia";
+import { filterCategories } from "@/lib/filterCategories";
 import { checkRate, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export async function GET(request: NextRequest) {
@@ -12,7 +16,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const results = await searchWikipedia(q);
-    return Response.json(results);
+    if (results.length === 0) return Response.json([]);
+
+    const counts = await fetchUsefulCategoryCounts(
+      results.map((r) => r.title),
+      filterCategories
+    );
+    const decorated = results.map((r) => ({
+      ...r,
+      categoryCount: counts.has(r.title) ? counts.get(r.title)! : null,
+    }));
+    return Response.json(decorated);
   } catch (err) {
     return Response.json(
       { error: err instanceof Error ? err.message : "Wikipedia search failed" },

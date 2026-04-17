@@ -2,6 +2,7 @@ export type WikipediaSuggestion = {
   title: string;
   description: string;
   url: string;
+  categoryCount?: number | null;
 };
 
 export type FetchedArticle = {
@@ -139,6 +140,80 @@ async function fetchFirstArticleImage(
   } catch {
     return null;
   }
+}
+
+/**
+ * Batch-fetch the count of *useful* (post-filter) categories for a
+ * list of article titles. One Wikipedia request for the whole batch.
+ * Returns a map keyed by the caller's original input title.
+ */
+export async function fetchUsefulCategoryCounts(
+  titles: string[],
+  filter: (cats: string[], title: string) => string[]
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (titles.length === 0) return counts;
+
+  const params = new URLSearchParams({
+    action: "query",
+    titles: titles.join("|"),
+    prop: "categories",
+    cllimit: "max",
+    clshow: "!hidden",
+    redirects: "1",
+    format: "json",
+    origin: "*",
+  });
+
+  try {
+    const res = await fetch(
+      `https://en.wikipedia.org/w/api.php?${params}`,
+      {
+        headers: { "User-Agent": "catfishing-clone/1.0 (education)" },
+        cache: "no-store",
+      }
+    );
+    if (!res.ok) return counts;
+
+    const data = (await res.json()) as {
+      query?: {
+        pages?: Record<
+          string,
+          { title?: string; categories?: Array<{ title: string }> }
+        >;
+        normalized?: Array<{ from: string; to: string }>;
+        redirects?: Array<{ from: string; to: string }>;
+      };
+    };
+
+    const catsByCanonical = new Map<string, string[]>();
+    for (const page of Object.values(data.query?.pages ?? {})) {
+      if (!page.title) continue;
+      catsByCanonical.set(
+        page.title,
+        (page.categories ?? []).map((c) => c.title.replace(/^Category:/, ""))
+      );
+    }
+
+    const normalized = data.query?.normalized ?? [];
+    const redirects = data.query?.redirects ?? [];
+
+    for (const t of titles) {
+      let resolved = t;
+      const n = normalized.find((x) => x.from === resolved);
+      if (n) resolved = n.to;
+      const r = redirects.find((x) => x.from === resolved);
+      if (r) resolved = r.to;
+      const raw = catsByCanonical.get(resolved);
+      if (raw) {
+        counts.set(t, filter(raw, resolved).length);
+      }
+    }
+  } catch {
+    // ignore — callers will just see absent counts
+  }
+
+  return counts;
 }
 
 export async function fetchArticle(title: string): Promise<FetchedArticle> {

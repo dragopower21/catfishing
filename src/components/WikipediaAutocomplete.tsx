@@ -161,21 +161,49 @@ export default function WikipediaAutocomplete({
                 type="button"
                 onMouseEnter={() => setActiveIdx(i)}
                 onClick={() => commit(s.title)}
-                className={`block w-full px-4 py-3 text-left transition ${
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${
                   i === activeIdx ? "bg-accent-yellow" : "hover:bg-paper"
                 }`}
               >
-                <div className="font-bold text-slate-900">{s.title}</div>
-                {s.description && (
-                  <div className="text-xs font-medium text-slate-600 line-clamp-1">
-                    {s.description}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-bold text-slate-900">
+                    {s.title}
                   </div>
-                )}
+                  {s.description && (
+                    <div className="truncate text-xs font-medium text-slate-600">
+                      {s.description}
+                    </div>
+                  )}
+                </div>
+                <CategoryBadge count={s.categoryCount} />
               </button>
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+function CategoryBadge({ count }: { count: number | null | undefined }) {
+  if (count === null || count === undefined) {
+    // Count not yet resolved (rare) — keep space reserved so rows don't jump.
+    return (
+      <span className="shrink-0 text-xs font-bold text-slate-300">—</span>
+    );
+  }
+  const tone =
+    count === 0
+      ? "bg-accent-red/30 text-slate-900"
+      : count < 3
+        ? "bg-accent-yellow text-slate-900"
+        : "bg-accent-green text-slate-900";
+  return (
+    <span
+      className={`shrink-0 rounded-full border-[2px] border-slate-900 px-2 py-0.5 text-xs font-extrabold tabular-nums ${tone}`}
+      title={`${count} useful ${count === 1 ? "category" : "categories"}`}
+    >
+      {count}
+    </span>
   );
 }
