@@ -229,6 +229,30 @@ export default function PlayPage({
     setPhase({ kind: "input" });
   }
 
+  // Enter = primary action in feedback phase (Next / See results). When
+  // the user is typing a guess, the form's own submit handles Enter, so
+  // we only listen here during feedback.
+  useEffect(() => {
+    if (phase.kind !== "feedback") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || e.isComposing) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      handleNext();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, currentIdx, articles.length]);
+
   const finishGame = useCallback(async () => {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;

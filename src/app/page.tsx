@@ -235,9 +235,22 @@ export default function DashboardPage() {
               min={3}
               max={20}
               value={randomCount}
+              autoFocus
               onChange={(e) => {
                 const n = Number(e.target.value);
                 if (!Number.isNaN(n)) setRandomCount(n);
+              }}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !randomLoading &&
+                  randomCount >= 3 &&
+                  randomCount <= 20 &&
+                  hasArticles
+                ) {
+                  e.preventDefault();
+                  startRandom();
+                }
               }}
               className="brut-input mt-4 w-full text-lg"
             />

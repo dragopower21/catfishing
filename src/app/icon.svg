@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Brutalist offset shadow -->
+  <rect x="4" y="5" width="26" height="25" rx="5" fill="#0F172A"/>
+  <!-- Yellow face with thick ink border -->
+  <rect x="2" y="3" width="26" height="25" rx="5" fill="#FACC15" stroke="#0F172A" stroke-width="2.5"/>
+  <!-- Bold C (stroked arc — renders consistently across rasterizers) -->
+  <path d="M 21.5 9 A 6.5 6.5 0 1 0 21.5 21.5" fill="none" stroke="#0F172A" stroke-width="4" stroke-linecap="round"/>
+</svg>

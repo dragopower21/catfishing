@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { House, RotateCcw } from "lucide-react";
 import ShareButton from "@/components/ShareButton";
 import { buildShareString } from "@/lib/shareString";
@@ -32,6 +33,7 @@ function ratingFor(pct: number): {
 }
 
 export default function ResultsPage() {
+  const router = useRouter();
   const [snap, setSnap] = useState<PlaySnapshot | null>(null);
   const [missing, setMissing] = useState(false);
 
@@ -47,6 +49,30 @@ export default function ResultsPage() {
       setMissing(true);
     }
   }, []);
+
+  // Enter = primary CTA. Play again if we have a saved set, otherwise home.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || e.isComposing) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      if (snap?.setId) {
+        router.push(`/play/${snap.setId}`);
+      } else {
+        router.push("/");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [snap, router]);
 
   if (missing) {
     return (
