@@ -109,9 +109,9 @@ export const sound = {
     return volume;
   },
 
-  // Barely-there tactile click for generic button presses.
+  // Soft tactile click for generic button presses.
   click() {
-    tone(900, 0.018, { type: "triangle", gain: 0.01, attack: 0.002 });
+    tone(900, 0.018, { type: "triangle", gain: 0.05, attack: 0.002 });
   },
 
   // Ascending triad — correct guess.
