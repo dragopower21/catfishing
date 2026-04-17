@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ArticleSet {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  articles    Article[]
+  plays       PlaySession[]
+}
+
+model Article {
+  id              String     @id @default(cuid())
+  setId           String
+  set             ArticleSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  title           String
+  wikipediaUrl    String
+  wikipediaPageId Int
+  categories      String
+  customHints     String     @default("[]")
+  aliases         String
+  summary         String?
+  thumbnailUrl    String?
+  orderIndex      Int        @default(0)
+  createdAt       DateTime   @default(now())
+
+  @@index([setId])
+}
+
+model PlaySession {
+  id         String     @id @default(cuid())
+  setId      String
+  set        ArticleSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  players    String
+  results    String
+  finishedAt DateTime   @default(now())
+}
