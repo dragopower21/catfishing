@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Copy, Link2, X } from "lucide-react";
+import { sound } from "@/lib/sound";
 
 type Props = {
   setName: string;
@@ -28,22 +29,25 @@ export default function ShareSetModal({ setName, setId, onClose }: Props) {
   const url = origin ? `${origin}/play/${setId}` : `/play/${setId}`;
 
   async function copy() {
+    let ok = false;
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      ok = true;
     } catch {
       const ta = document.createElement("textarea");
       ta.value = url;
       document.body.appendChild(ta);
       ta.select();
       try {
-        document.execCommand("copy");
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        ok = document.execCommand("copy");
       } finally {
         document.body.removeChild(ta);
       }
+    }
+    if (ok) {
+      setCopied(true);
+      sound.copy();
+      setTimeout(() => setCopied(false), 2000);
     }
   }
 
@@ -95,6 +99,7 @@ export default function ShareSetModal({ setName, setId, onClose }: Props) {
           <button
             type="button"
             onClick={copy}
+            data-silent
             className={`brut-btn ${
               copied ? "bg-accent-green" : "bg-accent-yellow"
             } text-slate-900`}

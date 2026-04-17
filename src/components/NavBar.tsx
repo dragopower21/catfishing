@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, HelpCircle, House } from "lucide-react";
 import ProfileMenu from "@/components/ProfileMenu";
+import SoundToggle from "@/components/SoundToggle";
 
 const LINKS = [
   { href: "/", label: "Home", icon: House },
@@ -38,6 +39,7 @@ export default function NavBar() {
             </Link>
           );
         })}
+        <SoundToggle />
         <ProfileMenu />
       </div>
     </nav>

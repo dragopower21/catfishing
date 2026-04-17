@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { House, RotateCcw } from "lucide-react";
 import ShareButton from "@/components/ShareButton";
 import { buildShareString } from "@/lib/shareString";
+import { sound } from "@/lib/sound";
 import type { PlayResultEntry } from "@/lib/types";
 
 type PlaySnapshot = {
@@ -45,6 +46,10 @@ export default function ResultsPage() {
     }
     try {
       setSnap(JSON.parse(raw));
+      // Slight delay so the fanfare blends with the navigation, not the
+      // Next-article click that got us here.
+      const t = setTimeout(() => sound.finish(), 200);
+      return () => clearTimeout(t);
     } catch {
       setMissing(true);
     }

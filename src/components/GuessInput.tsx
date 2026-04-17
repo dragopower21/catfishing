@@ -49,6 +49,7 @@ export default function GuessInput({
         <button
           type="submit"
           disabled={disabled || !value.trim()}
+          data-silent
           className="brut-btn flex-1 bg-accent-yellow px-5 py-4 text-slate-900 sm:flex-initial"
         >
           <Send className="h-4 w-4" strokeWidth={3} /> Submit
@@ -57,6 +58,7 @@ export default function GuessInput({
           type="button"
           onClick={onSkip}
           disabled={disabled}
+          data-silent
           className="brut-btn bg-white px-5 py-4 text-slate-900"
         >
           <SkipForward className="h-4 w-4" strokeWidth={3} /> Skip

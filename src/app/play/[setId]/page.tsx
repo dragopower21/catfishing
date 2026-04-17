@@ -14,6 +14,7 @@ import {
 import CategoryList from "@/components/CategoryList";
 import GuessInput from "@/components/GuessInput";
 import { matchGuess } from "@/lib/matchGuess";
+import { sound } from "@/lib/sound";
 import type { ArticleDTO, PlayResultEntry, SetDetail } from "@/lib/types";
 
 type Phase =
@@ -136,6 +137,14 @@ export default function PlayPage({
     return () => window.removeEventListener("beforeunload", handler);
   }, [articles.length]);
 
+  const playedStartRef = useRef(false);
+  useEffect(() => {
+    if (articles.length > 0 && !playedStartRef.current) {
+      playedStartRef.current = true;
+      sound.start();
+    }
+  }, [articles.length]);
+
   const article = articles[currentIdx];
   const sortedCategories = useMemo(() => {
     if (!article) return [];
@@ -167,17 +176,24 @@ export default function PlayPage({
       },
     ]);
     setPhase({ kind: "feedback", verdict, guess });
-    if (correct && typeof window !== "undefined") {
-      import("canvas-confetti")
-        .then(({ default: confetti }) => {
-          confetti({
-            particleCount: 80,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ["#FACC15", "#22C55E", "#38BDF8", "#FB7185"],
-          });
-        })
-        .catch(() => {});
+    if (correct) {
+      sound.correct();
+      if (typeof window !== "undefined") {
+        import("canvas-confetti")
+          .then(({ default: confetti }) => {
+            confetti({
+              particleCount: 80,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ["#FACC15", "#22C55E", "#38BDF8", "#FB7185"],
+            });
+          })
+          .catch(() => {});
+      }
+    } else if (skipped) {
+      sound.skip();
+    } else {
+      sound.wrong();
     }
   }
 
@@ -207,6 +223,7 @@ export default function PlayPage({
     setPhase((p) =>
       p.kind === "feedback" ? { ...p, verdict: "CLOSE" } : p
     );
+    sound.correct();
     if (typeof window !== "undefined") {
       import("canvas-confetti")
         .then(({ default: confetti }) => {
@@ -476,6 +493,7 @@ function FeedbackScreen({
             <button
               type="button"
               onClick={onCloseEnough}
+              data-silent
               className="brut-btn flex-1 bg-accent-yellow text-slate-900"
             >
               <ThumbsUp className="h-4 w-4" strokeWidth={3} /> Close enough
