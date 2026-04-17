@@ -1,18 +1,40 @@
 import { prisma } from "@/lib/db";
+import { getOwnerId } from "@/lib/owner";
+import { isAdmin } from "@/lib/admin";
+import { clampString, MAX_DESCRIPTION, MAX_NAME } from "@/lib/limits";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+async function authorize(setId: string): Promise<
+  | { ok: true; ownerId: string | null; admin: boolean; setOwnerId: string }
+  | { ok: false; status: number; error: string }
+> {
+  const set = await prisma.articleSet.findUnique({
+    where: { id: setId },
+    select: { ownerId: true },
+  });
+  if (!set) return { ok: false, status: 404, error: "Set not found" };
+  const [ownerId, admin] = await Promise.all([getOwnerId(), isAdmin()]);
+  if (!admin && (ownerId === null || ownerId !== set.ownerId)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "You don't own this set.",
+    };
+  }
+  return { ok: true, ownerId, admin, setOwnerId: set.ownerId };
+}
 
 export async function GET(_req: Request, { params }: Ctx) {
   const { id } = await params;
   const set = await prisma.articleSet.findUnique({
     where: { id },
-    include: {
-      articles: { orderBy: { orderIndex: "asc" } },
-    },
+    include: { articles: { orderBy: { orderIndex: "asc" } } },
   });
   if (!set) {
     return Response.json({ error: "Set not found" }, { status: 404 });
   }
+  const [ownerId, admin] = await Promise.all([getOwnerId(), isAdmin()]);
   const articles = set.articles.map((a) => ({
     id: a.id,
     setId: a.setId,
@@ -33,12 +55,19 @@ export async function GET(_req: Request, { params }: Ctx) {
     description: set.description,
     createdAt: set.createdAt,
     updatedAt: set.updatedAt,
+    isMine: ownerId !== null && set.ownerId === ownerId,
+    canManage: admin || (ownerId !== null && set.ownerId === ownerId),
     articles,
   });
 }
 
 export async function PATCH(request: Request, { params }: Ctx) {
   const { id } = await params;
+  const auth = await authorize(id);
+  if (!auth.ok) {
+    return Response.json({ error: auth.error }, { status: auth.status });
+  }
+
   let body: { name?: unknown; description?: unknown };
   try {
     body = await request.json();
@@ -47,29 +76,31 @@ export async function PATCH(request: Request, { params }: Ctx) {
   }
 
   const data: { name?: string; description?: string | null } = {};
-  if (typeof body.name === "string") {
-    const n = body.name.trim();
+  if (body.name !== undefined) {
+    const n = clampString(body.name, MAX_NAME);
     if (!n) {
       return Response.json({ error: "Name cannot be empty" }, { status: 400 });
     }
     data.name = n;
   }
-  if (typeof body.description === "string") {
-    data.description = body.description.trim() || null;
-  } else if (body.description === null) {
-    data.description = null;
+  if (body.description !== undefined) {
+    const d = clampString(body.description, MAX_DESCRIPTION);
+    data.description = d || null;
+  }
+  if (Object.keys(data).length === 0) {
+    return Response.json({ error: "Nothing to update" }, { status: 400 });
   }
 
-  try {
-    const updated = await prisma.articleSet.update({ where: { id }, data });
-    return Response.json(updated);
-  } catch {
-    return Response.json({ error: "Set not found" }, { status: 404 });
-  }
+  const updated = await prisma.articleSet.update({ where: { id }, data });
+  return Response.json(updated);
 }
 
 export async function DELETE(_req: Request, { params }: Ctx) {
   const { id } = await params;
+  const auth = await authorize(id);
+  if (!auth.ok) {
+    return Response.json({ error: auth.error }, { status: auth.status });
+  }
   try {
     await prisma.articleSet.delete({ where: { id } });
     return Response.json({ ok: true });

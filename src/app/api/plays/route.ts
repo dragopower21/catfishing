@@ -1,19 +1,26 @@
 import { prisma } from "@/lib/db";
+import {
+  clampString,
+  MAX_GUESS,
+  MAX_PLAYER_NAME,
+  MAX_PLAYERS,
+  MAX_RESULTS,
+} from "@/lib/limits";
+import { checkRate, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
-type PlayResult = {
-  articleId: string;
-  guesserName: string;
-  guessText: string;
-  correct: boolean;
-  skipped: boolean;
+type RawResult = {
+  articleId?: unknown;
+  guesserName?: unknown;
+  guessText?: unknown;
+  correct?: unknown;
+  skipped?: unknown;
 };
 
 export async function POST(request: Request) {
-  let body: {
-    setId?: unknown;
-    players?: unknown;
-    results?: unknown;
-  };
+  const rate = checkRate(clientKey(request, "plays"), 30, 60_000);
+  if (!rate.allowed) return tooManyRequests(rate.resetInMs);
+
+  let body: { setId?: unknown; players?: unknown; results?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -37,8 +44,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const players = body.players.map(String);
-  const results = body.results as PlayResult[];
+  const players = body.players
+    .slice(0, MAX_PLAYERS)
+    .map((p) => clampString(p, MAX_PLAYER_NAME))
+    .filter(Boolean);
+  if (players.length === 0) {
+    return Response.json(
+      { error: "players must contain at least one name" },
+      { status: 400 }
+    );
+  }
+
+  const results = (body.results as RawResult[])
+    .slice(0, MAX_RESULTS)
+    .map((r) => ({
+      articleId: typeof r.articleId === "string" ? r.articleId.slice(0, 50) : "",
+      guesserName: clampString(r.guesserName, MAX_PLAYER_NAME),
+      guessText: clampString(r.guessText, MAX_GUESS),
+      correct: Boolean(r.correct),
+      skipped: Boolean(r.skipped),
+    }));
 
   const setExists = await prisma.articleSet.findUnique({
     where: { id: setId },

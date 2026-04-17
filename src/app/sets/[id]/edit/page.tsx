@@ -37,6 +37,12 @@ export default function EditSetPage({
       return;
     }
     const d = (await res.json()) as SetDetail;
+    if (!d.canManage) {
+      setError(
+        "You can't edit this set — it was created by someone else. Play it from the dashboard instead."
+      );
+      return;
+    }
     setData(d);
     setNameDraft(d.name);
   }, [id]);

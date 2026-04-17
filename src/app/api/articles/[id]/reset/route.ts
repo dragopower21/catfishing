@@ -1,15 +1,31 @@
 import { prisma } from "@/lib/db";
 import { fetchArticle } from "@/lib/wikipedia";
 import { filterCategories } from "@/lib/filterCategories";
+import { getOwnerId } from "@/lib/owner";
+import { isAdmin } from "@/lib/admin";
+import { checkRate, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(_req: Request, { params }: Ctx) {
+export async function POST(request: Request, { params }: Ctx) {
+  const rate = checkRate(clientKey(request, "articles-reset"), 30, 60_000);
+  if (!rate.allowed) return tooManyRequests(rate.resetInMs);
+
   const { id } = await params;
 
-  const article = await prisma.article.findUnique({ where: { id } });
+  const article = await prisma.article.findUnique({
+    where: { id },
+    include: { set: { select: { ownerId: true } } },
+  });
   if (!article) {
     return Response.json({ error: "Article not found" }, { status: 404 });
+  }
+  const [ownerId, admin] = await Promise.all([getOwnerId(), isAdmin()]);
+  if (!admin && (ownerId === null || ownerId !== article.set.ownerId)) {
+    return Response.json(
+      { error: "You can only reset articles in your own sets." },
+      { status: 403 }
+    );
   }
 
   let fetched;

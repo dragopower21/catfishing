@@ -21,6 +21,8 @@ export type SetSummary = {
   createdAt: string;
   updatedAt: string;
   lastPlayedAt: string | null;
+  isMine: boolean;
+  canManage: boolean;
 };
 
 export type SetDetail = {
@@ -29,6 +31,8 @@ export type SetDetail = {
   description: string | null;
   createdAt: string;
   updatedAt: string;
+  isMine: boolean;
+  canManage: boolean;
   articles: ArticleDTO[];
 };
 

@@ -1,18 +1,42 @@
 import { prisma } from "@/lib/db";
 import { fetchArticle, titleFromUrl } from "@/lib/wikipedia";
 import { filterCategories } from "@/lib/filterCategories";
+import { getOwnerId } from "@/lib/owner";
+import { isAdmin } from "@/lib/admin";
+import { checkRate, clientKey, tooManyRequests } from "@/lib/rateLimit";
+import { MAX_ARTICLES_PER_SET } from "@/lib/limits";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, { params }: Ctx) {
+  const rate = checkRate(clientKey(request, "articles-add"), 30, 60_000);
+  if (!rate.allowed) return tooManyRequests(rate.resetInMs);
+
   const { id } = await params;
 
   const set = await prisma.articleSet.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, ownerId: true, _count: { select: { articles: true } } },
   });
   if (!set) {
     return Response.json({ error: "Set not found" }, { status: 404 });
+  }
+
+  const [ownerId, admin] = await Promise.all([getOwnerId(), isAdmin()]);
+  if (!admin && (ownerId === null || ownerId !== set.ownerId)) {
+    return Response.json(
+      { error: "You can only add articles to your own sets." },
+      { status: 403 }
+    );
+  }
+
+  if (set._count.articles >= MAX_ARTICLES_PER_SET) {
+    return Response.json(
+      {
+        error: `This set is full (max ${MAX_ARTICLES_PER_SET} articles).`,
+      },
+      { status: 409 }
+    );
   }
 
   let body: { urlOrTitle?: unknown };
@@ -23,7 +47,9 @@ export async function POST(request: Request, { params }: Ctx) {
   }
 
   const input =
-    typeof body.urlOrTitle === "string" ? body.urlOrTitle.trim() : "";
+    typeof body.urlOrTitle === "string"
+      ? body.urlOrTitle.trim().slice(0, 500)
+      : "";
   if (!input) {
     return Response.json(
       { error: "urlOrTitle is required" },

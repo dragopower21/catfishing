@@ -14,9 +14,9 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Catfishing — Guess the Wikipedia article",
+  title: "Catfishing with Friends",
   description:
-    "A pass-and-play Wikipedia category guessing game for you and your friends.",
+    "The Wikipedia guessing game, now with friends! Build sets, or try out any of the public sets.",
 };
 
 export default function RootLayout({

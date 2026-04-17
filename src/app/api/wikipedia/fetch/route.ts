@@ -1,7 +1,11 @@
 import { fetchArticle, titleFromUrl } from "@/lib/wikipedia";
 import { filterCategories } from "@/lib/filterCategories";
+import { checkRate, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
+  const rate = checkRate(clientKey(request, "wiki-fetch"), 30, 60_000);
+  if (!rate.allowed) return tooManyRequests(rate.resetInMs);
+
   let body: { urlOrTitle?: unknown };
   try {
     body = await request.json();
@@ -9,7 +13,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
   const input =
-    typeof body.urlOrTitle === "string" ? body.urlOrTitle.trim() : "";
+    typeof body.urlOrTitle === "string"
+      ? body.urlOrTitle.trim().slice(0, 500)
+      : "";
   if (!input) {
     return Response.json(
       { error: "urlOrTitle is required" },

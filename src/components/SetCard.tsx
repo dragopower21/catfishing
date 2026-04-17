@@ -25,24 +25,42 @@ function formatWhen(iso: string | null): string {
 export default function SetCard({ set, onDelete, accentColor }: Props) {
   const router = useRouter();
   const canPlay = set.articleCount > 0;
+  const canEdit = set.canManage;
 
-  return (
-    <div className="brut-card-link group relative flex flex-col overflow-hidden">
-      <Link
-        href={`/sets/${set.id}/edit`}
-        className="flex flex-1 flex-col p-5"
-        aria-label={`Edit ${set.name}`}
-      >
+  const headerAction = canEdit ? (
+    <Link
+      href={`/sets/${set.id}/edit`}
+      className="flex flex-1 flex-col p-5"
+      aria-label={`Edit ${set.name}`}
+    >
+      {renderHeader()}
+    </Link>
+  ) : (
+    <button
+      type="button"
+      onClick={() => canPlay && router.push(`/play/${set.id}`)}
+      disabled={!canPlay}
+      className="flex flex-1 flex-col p-5 text-left"
+      aria-label={`Play ${set.name}`}
+    >
+      {renderHeader()}
+    </button>
+  );
+
+  function renderHeader() {
+    return (
+      <>
         <div
           className="-mx-5 -mt-5 mb-4 border-b-[3px] border-slate-900 px-5 py-3"
           style={{ backgroundColor: accentColor }}
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-extrabold uppercase tracking-widest text-slate-900">
-              Set
+              {set.isMine ? "Your set" : "Public"}
             </span>
             <span className="brut-pill bg-white text-slate-900">
-              {set.articleCount} {set.articleCount === 1 ? "article" : "articles"}
+              {set.articleCount}{" "}
+              {set.articleCount === 1 ? "article" : "articles"}
             </span>
           </div>
         </div>
@@ -60,7 +78,13 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
         <div className="mt-4 text-xs font-bold uppercase tracking-wider text-slate-500">
           Last played · {formatWhen(set.lastPlayedAt)}
         </div>
-      </Link>
+      </>
+    );
+  }
+
+  return (
+    <div className="brut-card-link group relative flex flex-col overflow-hidden">
+      {headerAction}
 
       <div className="flex items-stretch gap-2 border-t-[3px] border-slate-900 bg-paper/50 p-3">
         <button
@@ -71,21 +95,25 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
         >
           <Play className="h-4 w-4" fill="currentColor" strokeWidth={2.5} /> Play
         </button>
-        <Link
-          href={`/sets/${set.id}/edit`}
-          className="brut-btn brut-btn-sm brut-btn-icon bg-white text-slate-900"
-          aria-label="Edit"
-        >
-          <Pencil className="h-4 w-4" strokeWidth={2.5} />
-        </Link>
-        <button
-          type="button"
-          onClick={() => onDelete(set.id)}
-          className="brut-btn brut-btn-sm brut-btn-icon bg-accent-red text-white"
-          aria-label="Delete"
-        >
-          <Trash2 className="h-4 w-4" strokeWidth={2.5} />
-        </button>
+        {canEdit && (
+          <>
+            <Link
+              href={`/sets/${set.id}/edit`}
+              className="brut-btn brut-btn-sm brut-btn-icon bg-white text-slate-900"
+              aria-label="Edit"
+            >
+              <Pencil className="h-4 w-4" strokeWidth={2.5} />
+            </Link>
+            <button
+              type="button"
+              onClick={() => onDelete(set.id)}
+              className="brut-btn brut-btn-sm brut-btn-icon bg-accent-red text-white"
+              aria-label="Delete"
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
