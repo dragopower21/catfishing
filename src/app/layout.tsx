@@ -14,7 +14,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Catfishing with Friends",
+  title: "We have Catfishing at Home",
   description:
     "The Wikipedia guessing game, now with friends! Build sets, or try out any of the public sets.",
 };

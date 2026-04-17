@@ -98,7 +98,7 @@ export default function DashboardPage() {
           />
         </div>
         <h1 className="mt-6 font-display text-6xl leading-[0.95] text-slate-900 sm:text-7xl">
-          Catfishing with Friends
+          We have Catfishing at Home
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-base font-medium text-slate-700">
           The Wikipedia guessing game, now with friends! Build sets, or try
