@@ -29,6 +29,7 @@ export default function EditSetPage({
   const [lastInput, setLastInput] = useState("");
   const [flash, setFlash] = useState<string | null>(null);
   const [pendingHints, setPendingHints] = useState<string[]>([]);
+  const [pendingAliases, setPendingAliases] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/sets/${id}`);
@@ -57,6 +58,7 @@ export default function EditSetPage({
     setPreviewLoading(true);
     setLastInput(urlOrTitle);
     setPendingHints([]);
+    setPendingAliases([]);
     try {
       const res = await fetch("/api/wikipedia/fetch", {
         method: "POST",
@@ -92,11 +94,18 @@ export default function EditSetPage({
         return;
       }
       let article = (await res.json()) as ArticleDTO;
-      if (pendingHints.length > 0) {
+      if (pendingHints.length > 0 || pendingAliases.length > 0) {
+        const patchBody: {
+          customHints?: string[];
+          customAliases?: string[];
+        } = {};
+        if (pendingHints.length > 0) patchBody.customHints = pendingHints;
+        if (pendingAliases.length > 0)
+          patchBody.customAliases = pendingAliases;
         const patchRes = await fetch(`/api/articles/${article.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ customHints: pendingHints }),
+          body: JSON.stringify(patchBody),
         });
         if (patchRes.ok) {
           article = (await patchRes.json()) as ArticleDTO;
@@ -107,6 +116,7 @@ export default function EditSetPage({
       );
       setPreview(null);
       setPendingHints([]);
+      setPendingAliases([]);
       setFlash(`Added “${article.title}”`);
       setTimeout(() => setFlash(null), 2000);
     } finally {
@@ -252,10 +262,13 @@ export default function EditSetPage({
             preview={preview}
             hints={pendingHints}
             onHintsChange={setPendingHints}
+            aliases={pendingAliases}
+            onAliasesChange={setPendingAliases}
             onConfirm={confirmAdd}
             onCancel={() => {
               setPreview(null);
               setPendingHints([]);
+              setPendingAliases([]);
             }}
             saving={saving}
           />

@@ -64,6 +64,7 @@ export async function POST(request: Request, { params }: Ctx) {
     categories: filtered,
     customHints: JSON.parse(updated.customHints) as string[],
     aliases: fetched.aliases,
+    customAliases: JSON.parse(updated.customAliases) as string[],
     summary: updated.summary,
     thumbnailUrl: updated.thumbnailUrl,
     orderIndex: updated.orderIndex,

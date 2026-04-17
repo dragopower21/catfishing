@@ -44,6 +44,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     categories: JSON.parse(a.categories) as string[],
     customHints: JSON.parse(a.customHints) as string[],
     aliases: JSON.parse(a.aliases) as string[],
+    customAliases: JSON.parse(a.customAliases) as string[],
     summary: a.summary,
     thumbnailUrl: a.thumbnailUrl,
     orderIndex: a.orderIndex,

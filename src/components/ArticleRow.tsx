@@ -27,13 +27,16 @@ export default function ArticleRow({
   onRemove,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [showWikipediaAliases, setShowWikipediaAliases] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hintDraft, setHintDraft] = useState("");
+  const [aliasDraft, setAliasDraft] = useState("");
 
   async function patch(body: {
     categories?: string[];
     customHints?: string[];
+    customAliases?: string[];
   }) {
     setBusy(true);
     setError(null);
@@ -78,9 +81,26 @@ export default function ArticleRow({
     setHintDraft("");
   }
 
+  async function removeAlias(alias: string) {
+    await patch({
+      customAliases: article.customAliases.filter((a) => a !== alias),
+    });
+  }
+
+  async function addAlias() {
+    const a = aliasDraft.trim();
+    if (!a) return;
+    if (article.customAliases.includes(a)) {
+      setAliasDraft("");
+      return;
+    }
+    await patch({ customAliases: [...article.customAliases, a] });
+    setAliasDraft("");
+  }
+
   async function reset() {
     const ok = confirm(
-      "Reset this article's categories to the Wikipedia defaults? Your custom hints are kept."
+      "Reset this article's categories to the Wikipedia defaults? Your custom hints and aliases are kept."
     );
     if (!ok) return;
     setBusy(true);
@@ -127,7 +147,10 @@ export default function ArticleRow({
             className="inline-flex items-center gap-1 truncate font-display text-lg text-slate-900 hover:underline"
           >
             {article.title}
-            <ExternalLink className="h-3.5 w-3.5 text-slate-500" strokeWidth={2.5} />
+            <ExternalLink
+              className="h-3.5 w-3.5 text-slate-500"
+              strokeWidth={2.5}
+            />
           </a>
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
             {article.categories.length} categories
@@ -135,7 +158,17 @@ export default function ArticleRow({
               <>
                 {" · "}
                 <span className="text-accent-green">
-                  {article.customHints.length} custom
+                  {article.customHints.length} hint
+                  {article.customHints.length === 1 ? "" : "s"}
+                </span>
+              </>
+            )}
+            {article.customAliases.length > 0 && (
+              <>
+                {" · "}
+                <span className="text-accent-pink">
+                  {article.customAliases.length} alias
+                  {article.customAliases.length === 1 ? "" : "es"}
                 </span>
               </>
             )}
@@ -210,6 +243,90 @@ export default function ArticleRow({
               <Plus className="h-4 w-4" strokeWidth={3} /> Add
             </button>
           </div>
+
+          <div className="mt-5 text-xs font-extrabold uppercase tracking-widest text-slate-600">
+            Your aliases{" "}
+            <span className="font-medium text-slate-400 normal-case tracking-normal">
+              — extra accepted answers
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {article.customAliases.length === 0 ? (
+              <span className="text-sm italic text-slate-500">
+                No custom aliases yet.
+              </span>
+            ) : (
+              article.customAliases.map((a) => (
+                <span
+                  key={a}
+                  className="inline-flex items-center gap-1.5 rounded-full border-[2.5px] border-slate-900 bg-accent-pink px-3 py-1 text-xs font-extrabold text-slate-900"
+                >
+                  {a}
+                  <button
+                    type="button"
+                    onClick={() => removeAlias(a)}
+                    disabled={busy}
+                    className="brut-btn-chip bg-white"
+                    aria-label={`Remove ${a}`}
+                  >
+                    <X className="h-3 w-3" strokeWidth={3} />
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <input
+              value={aliasDraft}
+              onChange={(e) => setAliasDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addAlias();
+                }
+              }}
+              placeholder="Add an accepted answer…"
+              disabled={busy}
+              className="brut-input flex-1 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={addAlias}
+              disabled={busy || !aliasDraft.trim()}
+              className="brut-btn brut-btn-sm bg-accent-pink text-slate-900"
+            >
+              <Plus className="h-4 w-4" strokeWidth={3} /> Add
+            </button>
+          </div>
+
+          {article.aliases.length > 0 && (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => setShowWikipediaAliases((v) => !v)}
+                className="flex items-center gap-1 text-xs font-extrabold uppercase tracking-widest text-slate-600 hover:text-slate-900"
+              >
+                {showWikipediaAliases ? (
+                  <ChevronDown className="h-3.5 w-3.5" strokeWidth={3} />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={3} />
+                )}
+                Wikipedia aliases ({article.aliases.length})
+              </button>
+              {showWikipediaAliases && (
+                <div className="mt-2 flex max-h-40 flex-wrap gap-1.5 overflow-auto">
+                  {article.aliases.map((a) => (
+                    <span
+                      key={a}
+                      className="rounded-full border-2 border-slate-300 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600"
+                    >
+                      {a}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-5 flex items-center justify-between">
             <div className="text-xs font-extrabold uppercase tracking-widest text-slate-600">

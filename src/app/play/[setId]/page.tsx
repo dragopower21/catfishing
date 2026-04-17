@@ -186,6 +186,7 @@ export default function PlayPage({
     const verdict = matchGuess(guess, {
       title: article.title,
       aliases: article.aliases,
+      customAliases: article.customAliases,
     });
     recordResult(verdict, guess, false);
   }

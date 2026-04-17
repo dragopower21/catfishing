@@ -7,6 +7,7 @@ export type ArticleDTO = {
   categories: string[];
   customHints: string[];
   aliases: string[];
+  customAliases: string[];
   summary: string | null;
   thumbnailUrl: string | null;
   orderIndex: number;

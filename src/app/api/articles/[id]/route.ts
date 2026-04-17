@@ -3,8 +3,10 @@ import { getOwnerId } from "@/lib/owner";
 import { isAdmin } from "@/lib/admin";
 import {
   clampString,
+  MAX_ALIAS,
   MAX_CATEGORIES_PER_ARTICLE,
   MAX_CATEGORY,
+  MAX_CUSTOM_ALIASES_PER_ARTICLE,
   MAX_HINT,
   MAX_HINTS_PER_ARTICLE,
 } from "@/lib/limits";
@@ -53,14 +55,22 @@ export async function PATCH(request: Request, { params }: Ctx) {
     return Response.json({ error: auth.error }, { status: auth.status });
   }
 
-  let body: { categories?: unknown; customHints?: unknown };
+  let body: {
+    categories?: unknown;
+    customHints?: unknown;
+    customAliases?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const data: { categories?: string; customHints?: string } = {};
+  const data: {
+    categories?: string;
+    customHints?: string;
+    customAliases?: string;
+  } = {};
 
   if (body.categories !== undefined) {
     const cats = sanitizeStringArray(
@@ -90,6 +100,20 @@ export async function PATCH(request: Request, { params }: Ctx) {
     }
     data.customHints = JSON.stringify(hints);
   }
+  if (body.customAliases !== undefined) {
+    const aliases = sanitizeStringArray(
+      body.customAliases,
+      MAX_ALIAS,
+      MAX_CUSTOM_ALIASES_PER_ARTICLE
+    );
+    if (aliases === null) {
+      return Response.json(
+        { error: "customAliases must be an array of strings" },
+        { status: 400 }
+      );
+    }
+    data.customAliases = JSON.stringify(aliases);
+  }
 
   if (Object.keys(data).length === 0) {
     return Response.json({ error: "Nothing to update" }, { status: 400 });
@@ -110,6 +134,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
     categories: JSON.parse(article.categories) as string[],
     customHints: JSON.parse(article.customHints) as string[],
     aliases: JSON.parse(article.aliases) as string[],
+    customAliases: JSON.parse(article.customAliases) as string[],
     summary: article.summary,
     thumbnailUrl: article.thumbnailUrl,
     orderIndex: article.orderIndex,

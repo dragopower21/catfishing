@@ -38,12 +38,20 @@ function significantWords(s: string): string[] {
 
 export function matchGuess(
   guess: string,
-  article: { title: string; aliases: string[] }
+  article: {
+    title: string;
+    aliases: string[];
+    customAliases?: string[];
+  }
 ): MatchVerdict {
   const g = normalize(guess);
   if (!g) return "WRONG";
 
-  const candidates = [article.title, ...article.aliases]
+  const candidates = [
+    article.title,
+    ...article.aliases,
+    ...(article.customAliases ?? []),
+  ]
     .map(normalize)
     .filter((c) => c.length > 0);
 

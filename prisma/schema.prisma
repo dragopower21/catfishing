@@ -30,6 +30,7 @@ model Article {
   categories      String
   customHints     String     @default("[]")
   aliases         String
+  customAliases   String     @default("[]")
   summary         String?
   thumbnailUrl    String?
   orderIndex      Int        @default(0)
