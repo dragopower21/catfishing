@@ -42,6 +42,10 @@ export async function GET(_req: Request, { params }: Ctx) {
       select: { displayName: true },
     }),
   ]);
+  const isMine = ownerId !== null && set.ownerId === ownerId;
+  if (set.hidden && !admin && !isMine) {
+    return Response.json({ error: "Set not found" }, { status: 404 });
+  }
   const articles = set.articles.map((a) => ({
     id: a.id,
     setId: a.setId,
@@ -62,10 +66,11 @@ export async function GET(_req: Request, { params }: Ctx) {
     id: set.id,
     name: set.name,
     description: set.description,
+    hidden: set.hidden,
     createdAt: set.createdAt,
     updatedAt: set.updatedAt,
-    isMine: ownerId !== null && set.ownerId === ownerId,
-    canManage: admin || (ownerId !== null && set.ownerId === ownerId),
+    isMine,
+    canManage: admin || isMine,
     creatorName: owner?.displayName ?? null,
     articles,
   });
@@ -78,14 +83,22 @@ export async function PATCH(request: Request, { params }: Ctx) {
     return Response.json({ error: auth.error }, { status: auth.status });
   }
 
-  let body: { name?: unknown; description?: unknown };
+  let body: {
+    name?: unknown;
+    description?: unknown;
+    hidden?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const data: { name?: string; description?: string | null } = {};
+  const data: {
+    name?: string;
+    description?: string | null;
+    hidden?: boolean;
+  } = {};
   if (body.name !== undefined) {
     const n = clampString(body.name, MAX_NAME);
     if (!n) {
@@ -96,6 +109,15 @@ export async function PATCH(request: Request, { params }: Ctx) {
   if (body.description !== undefined) {
     const d = clampString(body.description, MAX_DESCRIPTION);
     data.description = d || null;
+  }
+  if (body.hidden !== undefined) {
+    if (typeof body.hidden !== "boolean") {
+      return Response.json(
+        { error: "hidden must be a boolean" },
+        { status: 400 }
+      );
+    }
+    data.hidden = body.hidden;
   }
   if (Object.keys(data).length === 0) {
     return Response.json({ error: "Nothing to update" }, { status: 400 });

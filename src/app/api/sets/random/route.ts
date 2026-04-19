@@ -9,7 +9,10 @@ export async function GET(request: NextRequest) {
   }
   const count = Math.min(Math.max(requested, 3), 50);
 
-  const all = await prisma.article.findMany();
+  // Exclude articles from hidden sets — Random is a public pool.
+  const all = await prisma.article.findMany({
+    where: { set: { hidden: false } },
+  });
   if (all.length === 0) {
     return Response.json(
       { error: "No articles yet. Create a set first to play Random." },

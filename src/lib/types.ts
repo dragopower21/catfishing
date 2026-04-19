@@ -19,6 +19,7 @@ export type SetSummary = {
   id: string;
   name: string;
   description: string | null;
+  hidden: boolean;
   articleCount: number;
   createdAt: string;
   updatedAt: string;
@@ -32,6 +33,7 @@ export type SetDetail = {
   id: string;
   name: string;
   description: string | null;
+  hidden: boolean;
   createdAt: string;
   updatedAt: string;
   isMine: boolean;

@@ -3,13 +3,21 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Play, Share2, Trash2 } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Pencil,
+  Play,
+  Share2,
+  Trash2,
+} from "lucide-react";
 import ShareSetModal from "@/components/ShareSetModal";
 import type { SetSummary } from "@/lib/types";
 
 type Props = {
   set: SetSummary;
   onDelete: (id: string) => void;
+  onChange: (updated: SetSummary) => void;
   accentColor: string;
 };
 
@@ -24,11 +32,37 @@ function formatWhen(iso: string | null): string {
   return when.toLocaleDateString();
 }
 
-export default function SetCard({ set, onDelete, accentColor }: Props) {
+export default function SetCard({
+  set,
+  onDelete,
+  onChange,
+  accentColor,
+}: Props) {
   const router = useRouter();
   const [shareOpen, setShareOpen] = useState(false);
+  const [togglingHidden, setTogglingHidden] = useState(false);
   const canPlay = set.articleCount > 0;
   const canEdit = set.canManage;
+
+  async function toggleHidden() {
+    if (togglingHidden) return;
+    setTogglingHidden(true);
+    try {
+      const res = await fetch(`/api/sets/${set.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hidden: !set.hidden }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
+        alert(b.error ?? "Failed to update");
+        return;
+      }
+      onChange({ ...set, hidden: !set.hidden });
+    } finally {
+      setTogglingHidden(false);
+    }
+  }
 
   const headerAction = canEdit ? (
     <Link
@@ -58,9 +92,16 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
           style={{ backgroundColor: accentColor }}
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-widest text-slate-900">
-              {set.isMine ? "Your set" : "Public"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-extrabold uppercase tracking-widest text-slate-900">
+                {set.isMine ? "Your set" : "Public"}
+              </span>
+              {set.hidden && (
+                <span className="brut-sticker bg-slate-900 text-white">
+                  Hidden
+                </span>
+              )}
+            </div>
             <span className="brut-pill bg-white text-slate-900">
               {set.articleCount}{" "}
               {set.articleCount === 1 ? "article" : "articles"}
@@ -68,7 +109,11 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
           </div>
         </div>
 
-        <h3 className="font-display text-2xl leading-tight text-slate-900">
+        <h3
+          className={`font-display text-2xl leading-tight ${
+            set.hidden ? "text-slate-500" : "text-slate-900"
+          }`}
+        >
           {set.name}
         </h3>
         {set.description ? (
@@ -97,7 +142,11 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
   }
 
   return (
-    <div className="brut-card-link group relative flex flex-col overflow-hidden">
+    <div
+      className={`brut-card-link group relative flex flex-col overflow-hidden ${
+        set.hidden ? "opacity-75" : ""
+      }`}
+    >
       {headerAction}
 
       <div className="flex items-stretch gap-2 border-t-[3px] border-slate-900 bg-paper/50 p-3">
@@ -120,6 +169,28 @@ export default function SetCard({ set, onDelete, accentColor }: Props) {
         </button>
         {canEdit && (
           <>
+            <button
+              type="button"
+              onClick={toggleHidden}
+              disabled={togglingHidden}
+              className={`brut-btn brut-btn-sm brut-btn-icon ${
+                set.hidden
+                  ? "bg-accent-sky text-slate-900"
+                  : "bg-white text-slate-900"
+              }`}
+              aria-label={set.hidden ? "Unhide" : "Hide"}
+              title={
+                set.hidden
+                  ? "Unhide set (others can see it again)"
+                  : "Hide set (only you / admins will see it)"
+              }
+            >
+              {set.hidden ? (
+                <Eye className="h-4 w-4" strokeWidth={2.5} />
+              ) : (
+                <EyeOff className="h-4 w-4" strokeWidth={2.5} />
+              )}
+            </button>
             <Link
               href={`/sets/${set.id}/edit`}
               className="brut-btn brut-btn-sm brut-btn-icon bg-white text-slate-900"

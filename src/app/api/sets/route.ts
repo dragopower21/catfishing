@@ -5,21 +5,27 @@ import { clampString, MAX_DESCRIPTION, MAX_NAME, MAX_SETS_PER_OWNER } from "@/li
 import { checkRate, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export async function GET() {
-  const [sets, ownerId, admin] = await Promise.all([
-    prisma.articleSet.findMany({
-      orderBy: { updatedAt: "desc" },
-      include: {
-        _count: { select: { articles: true } },
-        plays: {
-          orderBy: { finishedAt: "desc" },
-          take: 1,
-          select: { finishedAt: true },
-        },
+  const [ownerId, admin] = await Promise.all([getOwnerId(), isAdmin()]);
+
+  // Hidden sets are visible only to their owner or to an admin.
+  const where = admin
+    ? {}
+    : ownerId
+      ? { OR: [{ hidden: false }, { ownerId }] }
+      : { hidden: false };
+
+  const sets = await prisma.articleSet.findMany({
+    where,
+    orderBy: { updatedAt: "desc" },
+    include: {
+      _count: { select: { articles: true } },
+      plays: {
+        orderBy: { finishedAt: "desc" },
+        take: 1,
+        select: { finishedAt: true },
       },
-    }),
-    getOwnerId(),
-    isAdmin(),
-  ]);
+    },
+  });
 
   // Batch-load creator display names.
   const ownerIds = Array.from(new Set(sets.map((s) => s.ownerId)));
@@ -35,6 +41,7 @@ export async function GET() {
     id: s.id,
     name: s.name,
     description: s.description,
+    hidden: s.hidden,
     articleCount: s._count.articles,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,

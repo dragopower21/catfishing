@@ -65,6 +65,12 @@ export default function DashboardPage() {
     }
   }
 
+  function handleSetChange(updated: SetSummary) {
+    setSets((prev) =>
+      prev ? prev.map((s) => (s.id === updated.id ? updated : s)) : prev
+    );
+  }
+
   async function startRandom() {
     setRandomLoading(true);
     try {
@@ -224,6 +230,7 @@ export default function DashboardPage() {
             emptyHint="Nothing yet. Create your first set above."
             sets={mineSets}
             onDelete={handleDelete}
+            onChange={handleSetChange}
             accentOffset={0}
           />
           <SetsSection
@@ -232,6 +239,7 @@ export default function DashboardPage() {
             emptyHint="No public sets yet. Be the first!"
             sets={publicSets}
             onDelete={handleDelete}
+            onChange={handleSetChange}
             accentOffset={2}
           />
         </>
@@ -314,6 +322,7 @@ function SetsSection({
   emptyHint,
   sets,
   onDelete,
+  onChange,
   accentOffset,
 }: {
   id: string;
@@ -321,6 +330,7 @@ function SetsSection({
   emptyHint: string;
   sets: SetSummary[];
   onDelete: (id: string) => void;
+  onChange: (updated: SetSummary) => void;
   accentOffset: number;
 }) {
   return (
@@ -343,6 +353,7 @@ function SetsSection({
               key={s.id}
               set={s}
               onDelete={onDelete}
+              onChange={onChange}
               accentColor={
                 ACCENTS[(i + accentOffset) % ACCENTS.length]
               }
