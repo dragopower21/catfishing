@@ -11,6 +11,8 @@ export type ArticleDTO = {
   customAliases: string[];
   summary: string | null;
   thumbnailUrl: string | null;
+  pageViews: number | null;
+  difficultyScore: number | null;
   orderIndex: number;
   createdAt: string;
 };
@@ -27,6 +29,7 @@ export type SetSummary = {
   isMine: boolean;
   canManage: boolean;
   creatorName: string | null;
+  difficultyScore: number | null;
 };
 
 export type SetDetail = {
@@ -39,6 +42,7 @@ export type SetDetail = {
   isMine: boolean;
   canManage: boolean;
   creatorName: string | null;
+  difficultyScore: number | null;
   articles: ArticleDTO[];
 };
 

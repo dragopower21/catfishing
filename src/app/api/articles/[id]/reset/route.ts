@@ -48,6 +48,8 @@ export async function POST(request: Request, { params }: Ctx) {
       aliases: JSON.stringify(fetched.aliases),
       summary: fetched.summary,
       thumbnailUrl: fetched.thumbnailUrl,
+      pageViews: fetched.pageViews,
+      difficultyScore: fetched.difficultyScore,
     },
   });
 
@@ -69,6 +71,8 @@ export async function POST(request: Request, { params }: Ctx) {
     customAliases: JSON.parse(updated.customAliases) as string[],
     summary: updated.summary,
     thumbnailUrl: updated.thumbnailUrl,
+    pageViews: updated.pageViews,
+    difficultyScore: updated.difficultyScore,
     orderIndex: updated.orderIndex,
     createdAt: updated.createdAt,
   });

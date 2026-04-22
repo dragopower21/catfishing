@@ -27,15 +27,38 @@ export async function GET() {
     },
   });
 
-  // Batch-load creator display names.
-  const ownerIds = Array.from(new Set(sets.map((s) => s.ownerId)));
-  const users = ownerIds.length
-    ? await prisma.user.findMany({
+  const [users, difficulties] = await Promise.all([
+    // Batch-load creator display names.
+    (async () => {
+      const ownerIds = Array.from(new Set(sets.map((s) => s.ownerId)));
+      if (ownerIds.length === 0) return [] as Array<{ id: string; displayName: string | null }>;
+      return prisma.user.findMany({
         where: { id: { in: ownerIds } },
         select: { id: true, displayName: true },
-      })
-    : [];
+      });
+    })(),
+    // Per-set average difficulty across scored articles only.
+    (async () => {
+      const setIds = sets.map((s) => s.id);
+      if (setIds.length === 0)
+        return [] as Array<{ setId: string; _avg: { difficultyScore: number | null } }>;
+      return prisma.article.groupBy({
+        by: ["setId"],
+        where: { setId: { in: setIds }, difficultyScore: { not: null } },
+        _avg: { difficultyScore: true },
+      });
+    })(),
+  ]);
+
   const nameById = new Map(users.map((u) => [u.id, u.displayName ?? null]));
+  const difficultyById = new Map(
+    difficulties.map((d) => [
+      d.setId,
+      d._avg.difficultyScore !== null
+        ? Math.round(d._avg.difficultyScore)
+        : null,
+    ])
+  );
 
   const shaped = sets.map((s) => ({
     id: s.id,
@@ -50,6 +73,7 @@ export async function GET() {
     canManage:
       admin || (ownerId !== null && s.ownerId === ownerId),
     creatorName: nameById.get(s.ownerId) ?? null,
+    difficultyScore: difficultyById.get(s.id) ?? null,
   }));
   return Response.json(shaped);
 }

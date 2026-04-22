@@ -40,6 +40,8 @@ export async function GET(request: NextRequest) {
     customAliases: JSON.parse(a.customAliases) as string[],
     summary: a.summary,
     thumbnailUrl: a.thumbnailUrl,
+    pageViews: a.pageViews,
+    difficultyScore: a.difficultyScore,
     orderIndex: a.orderIndex,
     createdAt: a.createdAt,
   }));

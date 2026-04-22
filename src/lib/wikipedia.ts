@@ -13,7 +13,70 @@ export type FetchedArticle = {
   aliases: string[];
   summary: string | null;
   thumbnailUrl: string | null;
+  pageViews: number | null;
+  difficultyScore: number | null;
 };
+
+/**
+ * Map yearly Wikipedia pageviews to a 1–10 difficulty score where 1 is
+ * the easiest (everyone knows it) and 10 is the hardest (obscure).
+ * Log scale because pageview counts span many orders of magnitude.
+ *
+ * Anchor points:
+ *   100M views / year (iconic, e.g. Wikipedia itself)      → 1
+ *   1M views   / year (well-known globally)                → 4
+ *   10K views  / year (niche / specialist)                 → 7
+ *   100 views  / year (truly obscure)                      → 10
+ */
+export function computeDifficultyFromPageViews(
+  views: number | null | undefined
+): number | null {
+  if (typeof views !== "number" || !Number.isFinite(views) || views < 0) {
+    return null;
+  }
+  const logViews = Math.log10(Math.max(1, views));
+  const raw = 1 + (8 - logViews) * 1.5;
+  return Math.max(1, Math.min(10, Math.round(raw)));
+}
+
+/**
+ * Sum of last 12 full months of pageviews from the Wikimedia REST API.
+ * Returns null on any failure — callers should treat null as "unknown".
+ */
+export async function fetchPageViewsYearly(
+  title: string
+): Promise<number | null> {
+  try {
+    const now = new Date();
+    // First of current month (exclusive upper bound of last full month).
+    const end = new Date(now.getFullYear(), now.getMonth(), 1);
+    const start = new Date(end);
+    start.setMonth(start.getMonth() - 12);
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}0100`;
+
+    const safe = encodeURIComponent(title.replace(/ /g, "_"));
+    const url =
+      `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/` +
+      `en.wikipedia.org/all-access/user/${safe}/monthly/${fmt(start)}/${fmt(end)}`;
+
+    const res = await fetch(url, {
+      headers: { "User-Agent": "catfishing-clone/1.0 (education)" },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      items?: Array<{ views?: number }>;
+    };
+    const total = (data.items ?? []).reduce(
+      (s, i) => s + (typeof i.views === "number" ? i.views : 0),
+      0
+    );
+    return total;
+  } catch {
+    return null;
+  }
+}
 
 export function titleFromUrl(url: string): string | null {
   const m = url.match(/\/wiki\/([^?#]+)/);
@@ -282,16 +345,15 @@ export async function fetchArticle(title: string): Promise<FetchedArticle> {
     );
   }
 
-  const [summary, fallbackImage] = await Promise.all([
+  const [summary, pageViews] = await Promise.all([
     fetchSummary(page.title),
-    Promise.resolve(null as string | null),
+    fetchPageViewsYearly(page.title),
   ]);
 
   let thumbnail = summary.thumbnail;
   if (!thumbnail) {
     thumbnail = await fetchFirstArticleImage(page.pageid);
   }
-  void fallbackImage;
 
   return {
     title: page.title,
@@ -305,5 +367,7 @@ export async function fetchArticle(title: string): Promise<FetchedArticle> {
     aliases,
     summary: summary.extract,
     thumbnailUrl: thumbnail,
+    pageViews,
+    difficultyScore: computeDifficultyFromPageViews(pageViews),
   };
 }

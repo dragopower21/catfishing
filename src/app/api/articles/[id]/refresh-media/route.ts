@@ -4,10 +4,11 @@ import { checkRate, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// Anyone who's playing a set can trigger a one-shot backfill of
-// summary/thumbnail on articles that are missing them. No ownership
-// check — this is a read-adjacent enrichment that only affects columns
-// Wikipedia already provides. Rate limited per IP.
+// Backfill of summary / thumbnail / pageViews / difficultyScore for
+// articles added before those fields existed. No ownership check — this
+// only writes columns Wikipedia owns and is rate-limited per IP. Returns
+// early when the cached fields are already populated so nothing can force
+// repeated external hits on the same article.
 export async function POST(request: Request, { params }: Ctx) {
   const rate = checkRate(clientKey(request, "refresh-media"), 60, 60_000);
   if (!rate.allowed) return tooManyRequests(rate.resetInMs);
@@ -19,13 +20,18 @@ export async function POST(request: Request, { params }: Ctx) {
     return Response.json({ error: "Article not found" }, { status: 404 });
   }
 
-  // Skip the Wikipedia hit entirely if we already have data; bad actors
-  // can't force repeated external requests this way.
-  if (article.summary !== null || article.thumbnailUrl !== null) {
+  const needsMedia =
+    article.summary === null && article.thumbnailUrl === null;
+  const needsScore =
+    article.pageViews === null || article.difficultyScore === null;
+
+  if (!needsMedia && !needsScore) {
     return Response.json({
       id: article.id,
       summary: article.summary,
       thumbnailUrl: article.thumbnailUrl,
+      pageViews: article.pageViews,
+      difficultyScore: article.difficultyScore,
     });
   }
 
@@ -39,17 +45,31 @@ export async function POST(request: Request, { params }: Ctx) {
     );
   }
 
+  const data: {
+    summary?: string | null;
+    thumbnailUrl?: string | null;
+    pageViews?: number | null;
+    difficultyScore?: number | null;
+  } = {};
+  if (needsMedia) {
+    data.summary = fetched.summary;
+    data.thumbnailUrl = fetched.thumbnailUrl;
+  }
+  if (needsScore) {
+    data.pageViews = fetched.pageViews;
+    data.difficultyScore = fetched.difficultyScore;
+  }
+
   const updated = await prisma.article.update({
     where: { id },
-    data: {
-      summary: fetched.summary,
-      thumbnailUrl: fetched.thumbnailUrl,
-    },
+    data,
   });
 
   return Response.json({
     id: updated.id,
     summary: updated.summary,
     thumbnailUrl: updated.thumbnailUrl,
+    pageViews: updated.pageViews,
+    difficultyScore: updated.difficultyScore,
   });
 }

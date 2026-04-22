@@ -154,6 +154,8 @@ export async function PATCH(request: Request, { params }: Ctx) {
     customAliases: JSON.parse(article.customAliases) as string[],
     summary: article.summary,
     thumbnailUrl: article.thumbnailUrl,
+    pageViews: article.pageViews,
+    difficultyScore: article.difficultyScore,
     orderIndex: article.orderIndex,
     createdAt: article.createdAt,
   });

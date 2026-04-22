@@ -91,7 +91,7 @@ export default function SetCard({
           className="-mx-5 -mt-5 mb-4 border-b-[3px] border-slate-900 px-5 py-3"
           style={{ backgroundColor: accentColor }}
         >
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-extrabold uppercase tracking-widest text-slate-900">
                 {set.isMine ? "Your set" : "Public"}
@@ -102,10 +102,13 @@ export default function SetCard({
                 </span>
               )}
             </div>
-            <span className="brut-pill bg-white text-slate-900">
-              {set.articleCount}{" "}
-              {set.articleCount === 1 ? "article" : "articles"}
-            </span>
+            <div className="flex items-center gap-2">
+              <DifficultyPill score={set.difficultyScore} />
+              <span className="brut-pill bg-white text-slate-900">
+                {set.articleCount}{" "}
+                {set.articleCount === 1 ? "article" : "articles"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -218,5 +221,44 @@ export default function SetCard({
         />
       )}
     </div>
+  );
+}
+
+function DifficultyPill({ score }: { score: number | null }) {
+  if (score === null) {
+    return (
+      <span
+        className="brut-pill bg-white text-slate-400"
+        title="Not rated yet"
+      >
+        ?/10
+      </span>
+    );
+  }
+  // 1-3 easy · 4-6 medium · 7-8 hard · 9-10 brutal
+  const bg =
+    score <= 3
+      ? "bg-accent-green"
+      : score <= 6
+        ? "bg-accent-yellow"
+        : score <= 8
+          ? "bg-accent-pink"
+          : "bg-accent-red";
+  const textColor = score >= 9 ? "text-white" : "text-slate-900";
+  const label =
+    score <= 3
+      ? "Easy"
+      : score <= 6
+        ? "Medium"
+        : score <= 8
+          ? "Hard"
+          : "Brutal";
+  return (
+    <span
+      className={`brut-pill ${bg} ${textColor}`}
+      title={`${label} · estimated ${score} / 10 based on Wikipedia pageviews`}
+    >
+      {score}/10
+    </span>
   );
 }

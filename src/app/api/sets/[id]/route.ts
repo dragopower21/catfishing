@@ -59,9 +59,20 @@ export async function GET(_req: Request, { params }: Ctx) {
     customAliases: JSON.parse(a.customAliases) as string[],
     summary: a.summary,
     thumbnailUrl: a.thumbnailUrl,
+    pageViews: a.pageViews,
+    difficultyScore: a.difficultyScore,
     orderIndex: a.orderIndex,
     createdAt: a.createdAt,
   }));
+
+  const scored = articles
+    .map((a) => a.difficultyScore)
+    .filter((v): v is number => typeof v === "number");
+  const difficultyScore =
+    scored.length > 0
+      ? Math.round(scored.reduce((s, x) => s + x, 0) / scored.length)
+      : null;
+
   return Response.json({
     id: set.id,
     name: set.name,
@@ -72,6 +83,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     isMine,
     canManage: admin || isMine,
     creatorName: owner?.displayName ?? null,
+    difficultyScore,
     articles,
   });
 }

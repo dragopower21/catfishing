@@ -43,6 +43,8 @@ model Article {
   customAliases      String     @default("[]")
   summary         String?
   thumbnailUrl    String?
+  pageViews       Int?
+  difficultyScore Int?
   orderIndex      Int        @default(0)
   createdAt       DateTime   @default(now())
 
