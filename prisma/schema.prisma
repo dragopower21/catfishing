@@ -116,10 +116,13 @@ model LobbyRound {
   articleThumbnailUrl  String?
   articleDifficulty    Int?
   startsAt             DateTime?
+  /// Dual-purpose: in ACTIVE state this is the timer end; in ENDED
+  /// state this is the time at which the next round may start (reveal
+  /// window).
   endsAt               DateTime?
   createdAt            DateTime @default(now())
 
-  @@index([lobbyId, roundNumber])
+  @@unique([lobbyId, roundNumber])
 }
 
 model LobbyMessage {
@@ -132,7 +135,10 @@ model LobbyMessage {
   text        String?  // null for CORRECT_GUESS (to hide answer)
   type        String   @default("CHAT") // CHAT | SYSTEM | CORRECT_GUESS
   points      Int?     // filled for CORRECT_GUESS
+  roundId     String?  // which round this message belongs to (null for waiting-room chat)
+  orderIndex  Int?     // for CORRECT_GUESS: 0-based order among correct guessers this round
   createdAt   DateTime @default(now())
 
   @@index([lobbyId, createdAt])
+  @@index([roundId])
 }

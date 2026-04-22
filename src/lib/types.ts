@@ -99,9 +99,48 @@ export type LobbySummary = {
   memberCount: number;
 };
 
+export type LobbyRoundView = {
+  id: string;
+  roundNumber: number;
+  pickerMemberId: string | null;
+  status: "PICKING" | "ACTIVE" | "ENDED";
+  categories: string[] | null;
+  startsAt: string | null;
+  endsAt: string | null;
+};
+
+export type LobbyRoundReveal = {
+  id: string;
+  roundNumber: number;
+  title: string | null;
+  url: string | null;
+  summary: string | null;
+  thumbnailUrl: string | null;
+  difficulty: number | null;
+  categories: string[];
+};
+
+export type LobbyMessageDTO = {
+  id: string;
+  memberId: string | null;
+  displayName: string;
+  text: string | null;
+  type: "CHAT" | "SYSTEM" | "CORRECT_GUESS";
+  points: number | null;
+  roundId: string | null;
+  createdAt: string;
+};
+
 export type LobbyState = LobbySummary & {
   id: string;
   members: LobbyMemberDTO[];
   /** present only if the requester is already a member */
   me: LobbyMemberDTO | null;
+  currentRound: LobbyRoundView | null;
+  lastReveal: LobbyRoundReveal | null;
+  messages: LobbyMessageDTO[];
+  picker: { id: string; displayName: string } | null;
+  finalScores:
+    | Array<{ id: string; displayName: string; score: number }>
+    | null;
 };
