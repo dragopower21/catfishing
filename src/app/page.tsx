@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Dice5, Plus, BookOpen, Fish, Cat, Loader2 } from "lucide-react";
+import {
+  BookOpen,
+  Cat,
+  Dice5,
+  Fish,
+  Gamepad2,
+  Loader2,
+  Plus,
+} from "lucide-react";
 import SetCard from "@/components/SetCard";
 import SetSearch from "@/components/SetSearch";
 import AdminToggle from "@/components/AdminToggle";
@@ -125,7 +133,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <section className="grid gap-5 sm:grid-cols-3">
+      <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <button
           type="button"
           onClick={() => setShowRandom(true)}
@@ -167,6 +175,32 @@ export default function DashboardPage() {
             </div>
             <div className="mt-1 text-sm font-semibold text-slate-600">
               Pick a theme, add articles.
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/multiplayer"
+          className="brut-card-link flex min-h-44 flex-col justify-between bg-white p-5"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl border-[3px] border-slate-900 bg-accent-lavender brut-shadow-sm">
+              <Gamepad2
+                className="h-7 w-7 text-slate-900"
+                strokeWidth={2.5}
+                fill="currentColor"
+              />
+            </div>
+            <span className="brut-sticker bg-accent-lavender text-slate-900">
+              Live
+            </span>
+          </div>
+          <div>
+            <div className="font-display text-3xl text-slate-900">
+              Multiplayer
+            </div>
+            <div className="mt-1 text-sm font-semibold text-slate-600">
+              Play live with friends.
             </div>
           </div>
         </Link>

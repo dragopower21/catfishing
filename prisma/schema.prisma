@@ -59,3 +59,80 @@ model PlaySession {
   results    String
   finishedAt DateTime   @default(now())
 }
+
+// -- Multiplayer lobbies ---------------------------------------------------
+
+model Lobby {
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  mode               String   // "FREESTYLE" | "SET_BASED"
+  setId              String?  // for SET_BASED
+  passwordHash       String?
+  status             String   @default("WAITING") // "WAITING" | "IN_GAME" | "ENDED"
+  roundDuration      Int      @default(80)
+  totalRounds        Int      @default(8)
+  currentRoundNumber Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  members  LobbyMember[]
+  rounds   LobbyRound[]
+  messages LobbyMessage[]
+
+  @@index([code])
+}
+
+model LobbyMember {
+  id          String   @id @default(cuid())
+  lobbyId     String
+  lobby       Lobby    @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  userId      String   // owner cookie
+  displayName String
+  score       Int      @default(0)
+  isHost      Boolean  @default(false)
+  joinedAt    DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  messages LobbyMessage[]
+
+  @@unique([lobbyId, userId])
+  @@index([lobbyId])
+}
+
+model LobbyRound {
+  id                   String   @id @default(cuid())
+  lobbyId              String
+  lobby                Lobby    @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  roundNumber          Int
+  pickerMemberId       String?
+  status               String   @default("PICKING") // PICKING | ACTIVE | ENDED
+  articleTitle         String?
+  articleUrl           String?
+  articlePageId        Int?
+  articleCategories    String?  // JSON string[]
+  articleAliases       String?  // JSON string[]
+  articleCustomAliases String?  // JSON string[]
+  articleSummary       String?
+  articleThumbnailUrl  String?
+  articleDifficulty    Int?
+  startsAt             DateTime?
+  endsAt               DateTime?
+  createdAt            DateTime @default(now())
+
+  @@index([lobbyId, roundNumber])
+}
+
+model LobbyMessage {
+  id          String   @id @default(cuid())
+  lobbyId     String
+  lobby       Lobby    @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  memberId    String?
+  member      LobbyMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  displayName String   // snapshot at send time
+  text        String?  // null for CORRECT_GUESS (to hide answer)
+  type        String   @default("CHAT") // CHAT | SYSTEM | CORRECT_GUESS
+  points      Int?     // filled for CORRECT_GUESS
+  createdAt   DateTime @default(now())
+
+  @@index([lobbyId, createdAt])
+}

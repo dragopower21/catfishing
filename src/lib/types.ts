@@ -73,3 +73,35 @@ export type ProfileDTO = {
   displayName: string | null;
   hasPassword: boolean;
 };
+
+export type LobbyMode = "FREESTYLE" | "SET_BASED";
+export type LobbyStatus = "WAITING" | "IN_GAME" | "ENDED";
+
+export type LobbyMemberDTO = {
+  id: string;
+  displayName: string;
+  score: number;
+  isHost: boolean;
+  isMe: boolean;
+  joinedAt: string;
+};
+
+export type LobbySummary = {
+  code: string;
+  mode: LobbyMode;
+  status: LobbyStatus;
+  hasPassword: boolean;
+  setId: string | null;
+  setName: string | null;
+  roundDuration: number;
+  totalRounds: number;
+  currentRoundNumber: number;
+  memberCount: number;
+};
+
+export type LobbyState = LobbySummary & {
+  id: string;
+  members: LobbyMemberDTO[];
+  /** present only if the requester is already a member */
+  me: LobbyMemberDTO | null;
+};
