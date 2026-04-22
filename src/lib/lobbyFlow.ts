@@ -261,10 +261,33 @@ export async function submitPick(
   const me = lobby.members.find((m) => m.userId === ownerId);
   if (!me) throw new FlowError(403, "Not a member");
   const round = lobby.rounds[0];
-  if (!round || round.status !== "PICKING")
-    throw new FlowError(409, "Not in picking phase");
-  if (round.pickerMemberId !== me.id)
-    throw new FlowError(403, "It's not your turn to pick");
+  if (!round) throw new FlowError(409, "No active round");
+  if (round.status !== "PICKING") {
+    // Game moved on — likely the reveal advanced and we're now in the
+    // next round's PICKING or ACTIVE. Re-fetch on client will show it.
+    console.warn("[submitPick] round not in PICKING", {
+      code,
+      roundNumber: round.roundNumber,
+      status: round.status,
+    });
+    throw new FlowError(
+      409,
+      `Round ${round.roundNumber} is ${round.status.toLowerCase()}, not picking. Refresh the page.`
+    );
+  }
+  if (round.pickerMemberId !== me.id) {
+    console.warn("[submitPick] picker mismatch", {
+      code,
+      roundNumber: round.roundNumber,
+      expectedPicker: round.pickerMemberId,
+      actualMe: me.id,
+      membersByJoinOrder: lobby.members.map((m) => m.id),
+    });
+    throw new FlowError(
+      403,
+      `It's not your turn to pick (round ${round.roundNumber} picker is someone else — try refreshing).`
+    );
+  }
 
   const input = urlOrTitle.trim().slice(0, 500);
   if (!input) throw new FlowError(400, "Pick an article");
@@ -441,7 +464,18 @@ async function endRound(
   lobby: LobbyWithMembersAndRounds,
   round: RoundRow
 ): Promise<void> {
-  if (round.status === "ENDED") return;
+  // Atomic transition — only the caller that actually flips the status
+  // wins, so picker bonus + broadcast happen exactly once even when a
+  // correct-guess handler and the timer-expiry tick race.
+  const nextRoundAt = new Date(Date.now() + NEXT_ROUND_DELAY_MS);
+  const transition = await prisma.lobbyRound.updateMany({
+    where: { id: round.id, status: { in: ["ACTIVE", "PICKING"] } },
+    data: { status: "ENDED", endsAt: nextRoundAt },
+  });
+  if (transition.count === 0) {
+    // Someone else already ended this round.
+    return;
+  }
 
   // Picker bonus (Freestyle only).
   if (lobby.mode === "FREESTYLE" && round.pickerMemberId) {
@@ -479,12 +513,6 @@ async function endRound(
       points: pickerPoints,
     });
   }
-
-  const nextRoundAt = new Date(Date.now() + NEXT_ROUND_DELAY_MS);
-  await prisma.lobbyRound.update({
-    where: { id: round.id },
-    data: { status: "ENDED", endsAt: nextRoundAt },
-  });
 
   const members = await prisma.lobbyMember.findMany({
     where: { lobbyId: lobby.id },

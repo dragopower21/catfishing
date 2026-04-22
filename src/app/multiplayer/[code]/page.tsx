@@ -454,6 +454,7 @@ function GameScreen({
               code={code}
               amPicker={amPicker}
               pickerName={picker?.displayName ?? "someone"}
+              onRefresh={onRefresh}
             />
           )}
           {round?.status === "ACTIVE" && (
@@ -487,10 +488,12 @@ function PickingPhase({
   code,
   amPicker,
   pickerName,
+  onRefresh,
 }: {
   code: string;
   amPicker: boolean;
   pickerName: string;
+  onRefresh: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -507,6 +510,11 @@ function PickingPhase({
       if (!res.ok) {
         const b = await res.json().catch(() => ({}));
         setError(b.error ?? "Pick failed");
+        // If the server disagrees about whose turn it is, the client
+        // is probably stale — pull fresh state to resolve.
+        if (res.status === 403 || res.status === 409) {
+          onRefresh();
+        }
       }
     } finally {
       setSubmitting(false);
@@ -779,7 +787,7 @@ function ChatBox({
   }
 
   return (
-    <div className="brut-card flex h-[440px] flex-col bg-white p-0">
+    <div className="brut-card flex h-[440px] flex-col overflow-hidden bg-white p-0">
       <div className="border-b-[3px] border-slate-900 bg-accent-sky px-4 py-2 text-xs font-extrabold uppercase tracking-widest text-slate-900">
         Chat
       </div>
