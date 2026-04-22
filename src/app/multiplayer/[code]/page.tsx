@@ -456,30 +456,50 @@ function GameScreen({
     remainingMs !== null ? Math.ceil(remainingMs / 1000) : null;
 
   // Poke the server until the round advances. Covers the case where a
-  // single tick's effect didn't take (Pusher hiccup, network blip). The
-  // effect tears down as soon as round.id or endsAt change.
+  // single tick's effect didn't take (Pusher hiccup, network blip).
+  // Schedules a setTimeout for the deadline (if still in the future)
+  // and THEN a 2.5s polling interval, so the poll actually fires after
+  // the round's end-time even if the deadline is currently in the
+  // future when the effect mounts. Tears down as soon as round.id or
+  // endsAt change.
   useEffect(() => {
     if (!round) return;
     const endsAtMsLocal = round.endsAt
       ? new Date(round.endsAt).getTime()
       : null;
-    if (endsAtMsLocal === null) return; // PICKING — no deadline
-    if (Date.now() < endsAtMsLocal) return; // timer still running
+    if (endsAtMsLocal === null) return; // PICKING — no deadline to tick on
+
     let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
     const poke = async () => {
       if (cancelled) return;
       try {
         await fetch(`/api/lobbies/${code}/tick`, { method: "POST" });
       } catch {
-        // ignore
+        // ignore — onRefresh below still triggers a server-side tick
       }
       if (!cancelled) onRefresh();
     };
-    poke();
-    const id = setInterval(poke, 2500);
+
+    const startPolling = () => {
+      if (cancelled) return;
+      poke();
+      intervalId = setInterval(poke, 2500);
+    };
+
+    const msUntilExpiry = endsAtMsLocal - Date.now();
+    if (msUntilExpiry <= 0) {
+      startPolling();
+    } else {
+      timeoutId = setTimeout(startPolling, msUntilExpiry);
+    }
+
     return () => {
       cancelled = true;
-      clearInterval(id);
+      if (intervalId) clearInterval(intervalId);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [round?.id, round?.endsAt, code, onRefresh]);
 
