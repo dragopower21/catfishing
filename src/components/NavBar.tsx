@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Gamepad2, HelpCircle, House } from "lucide-react";
+import { BookOpen, Gamepad2, HelpCircle, House, Plus } from "lucide-react";
 import ProfileMenu from "@/components/ProfileMenu";
 import SoundToggle from "@/components/SoundToggle";
 
 const LINKS = [
   { href: "/", label: "Home", icon: House },
   { href: "/multiplayer", label: "Multiplayer", icon: Gamepad2 },
+  { href: "/sets/new", label: "Create", icon: Plus },
   { href: "/how-to-play", label: "How to play", icon: HelpCircle },
   { href: "/about", label: "About", icon: BookOpen },
 ];

@@ -218,7 +218,11 @@ function CreateForm({
         />
       </label>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+      <div
+        className={`mt-4 grid gap-4 ${
+          mode === "FREESTYLE" ? "sm:grid-cols-2" : ""
+        }`}
+      >
         <label className="block">
           <span className="text-xs font-extrabold uppercase tracking-widest text-slate-600">
             Round duration
@@ -238,19 +242,28 @@ function CreateForm({
             ))}
           </select>
         </label>
-        <label className="block">
-          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-600">
-            Rounds
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={30}
-            value={totalRounds}
-            onChange={(e) => setTotalRounds(Number(e.target.value) || 8)}
-            className="brut-input mt-2 block w-full"
-          />
-        </label>
+        {mode === "FREESTYLE" ? (
+          <label className="block">
+            <span className="text-xs font-extrabold uppercase tracking-widest text-slate-600">
+              Rounds
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={totalRounds}
+              onChange={(e) => setTotalRounds(Number(e.target.value) || 8)}
+              className="brut-input mt-2 block w-full"
+            />
+          </label>
+        ) : setId ? (
+          <div className="mt-2 rounded-lg border-[2.5px] border-slate-900 bg-paper px-3 py-2 text-xs font-bold text-slate-700">
+            One round per article —{" "}
+            <span className="text-slate-900">
+              {sets?.find((s) => s.id === setId)?.articleCount ?? "?"} rounds
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <label className="mt-4 block">

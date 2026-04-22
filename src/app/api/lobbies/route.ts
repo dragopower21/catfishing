@@ -39,6 +39,7 @@ export async function POST(request: Request) {
   }
 
   let setId: string | null = null;
+  let articleCountForSet = 0;
   if (mode === "SET_BASED") {
     if (typeof body.setId !== "string" || !body.setId) {
       return Response.json(
@@ -48,12 +49,23 @@ export async function POST(request: Request) {
     }
     const set = await prisma.articleSet.findUnique({
       where: { id: body.setId },
-      select: { id: true, hidden: true },
+      select: {
+        id: true,
+        hidden: true,
+        _count: { select: { articles: true } },
+      },
     });
     if (!set || set.hidden) {
       return Response.json({ error: "Set not found" }, { status: 404 });
     }
+    if (set._count.articles === 0) {
+      return Response.json(
+        { error: "That set has no articles yet." },
+        { status: 400 }
+      );
+    }
     setId = set.id;
+    articleCountForSet = set._count.articles;
   }
 
   let passwordHash: string | null = null;
@@ -75,12 +87,16 @@ export async function POST(request: Request) {
       : mode === "FREESTYLE"
         ? 80
         : 60;
+  // Set-based: one round per article, locked in at creation time.
+  // Freestyle: host-configurable.
   const totalRounds =
-    typeof body.totalRounds === "number" &&
-    body.totalRounds >= 1 &&
-    body.totalRounds <= 30
-      ? body.totalRounds
-      : 8;
+    mode === "SET_BASED"
+      ? articleCountForSet
+      : typeof body.totalRounds === "number" &&
+          body.totalRounds >= 1 &&
+          body.totalRounds <= 30
+        ? body.totalRounds
+        : 8;
 
   const ownerId = await ensureOwnerId();
 

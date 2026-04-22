@@ -48,6 +48,8 @@ export default function LobbyPage({
   const [state, setState] = useState<LobbyState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // memberId → timestamp of their most recent typing signal
+  const [typingAt, setTypingAt] = useState<Record<string, number>>({});
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/lobbies/${code}`);
@@ -111,13 +113,48 @@ export default function LobbyPage({
     const onCorrect = () => sound.correct();
     ch.bind("correct-guess", onCorrect);
 
+    type TypingMeta = { user_id?: string };
+    const onTyping = (_data: unknown, meta?: TypingMeta) => {
+      if (!meta?.user_id) return;
+      setTypingAt((prev) => ({ ...prev, [meta.user_id!]: Date.now() }));
+    };
+    const onStopTyping = (_data: unknown, meta?: TypingMeta) => {
+      if (!meta?.user_id) return;
+      setTypingAt((prev) => {
+        const out = { ...prev };
+        delete out[meta.user_id!];
+        return out;
+      });
+    };
+    ch.bind("client-typing", onTyping);
+    ch.bind("client-stop-typing", onStopTyping);
+
     return () => {
       events.forEach((e) => ch.unbind(e, bust));
       ch.unbind("chat-message", onChat);
       ch.unbind("correct-guess", onCorrect);
+      ch.unbind("client-typing", onTyping);
+      ch.unbind("client-stop-typing", onStopTyping);
       p.unsubscribe(lobbyChannelName(code));
     };
   }, [isMember, code]);
+
+  // Sweep stale typing signals (>4s old) every second.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTypingAt((prev) => {
+        const now = Date.now();
+        let changed = false;
+        const out: Record<string, number> = {};
+        for (const [k, t] of Object.entries(prev)) {
+          if (now - t < 4000) out[k] = t;
+          else changed = true;
+        }
+        return changed ? out : prev;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Safety-net: poll state every 5s so even a completely silent Pusher
   // connection still eventually surfaces round advances.
@@ -171,7 +208,12 @@ export default function LobbyPage({
       {state.status === "WAITING" ? (
         <WaitingRoom code={code} state={state} onRefresh={refresh} />
       ) : state.status === "IN_GAME" ? (
-        <GameScreen code={code} state={state} onRefresh={refresh} />
+        <GameScreen
+          code={code}
+          state={state}
+          onRefresh={refresh}
+          typingAt={typingAt}
+        />
       ) : (
         <EndScreen state={state} />
       )}
@@ -438,10 +480,12 @@ function GameScreen({
   code,
   state,
   onRefresh,
+  typingAt,
 }: {
   code: string;
   state: LobbyState;
   onRefresh: () => void;
+  typingAt: Record<string, number>;
 }) {
   const me = state.me!;
   const round = state.currentRound;
@@ -467,19 +511,18 @@ function GameScreen({
   const remainingSec =
     remainingMs !== null ? Math.ceil(remainingMs / 1000) : null;
 
-  // Poke the server until the round advances. Covers the case where a
-  // single tick's effect didn't take (Pusher hiccup, network blip).
-  // Schedules a setTimeout for the deadline (if still in the future)
-  // and THEN a 2.5s polling interval, so the poll actually fires after
-  // the round's end-time even if the deadline is currently in the
-  // future when the effect mounts. Tears down as soon as round.id or
-  // endsAt change.
+  // Poke the server when an ACTIVE round's timer runs out. Advancing
+  // past an ENDED round is host-driven (button), so we don't auto-tick
+  // for those. setTimeout schedules the first poke at the deadline,
+  // then falls back to a 2.5s interval until the round actually moves
+  // (Pusher hiccup / missed broadcast safety).
   useEffect(() => {
     if (!round) return;
+    if (round.status !== "ACTIVE") return;
     const endsAtMsLocal = round.endsAt
       ? new Date(round.endsAt).getTime()
       : null;
-    if (endsAtMsLocal === null) return; // PICKING — no deadline to tick on
+    if (endsAtMsLocal === null) return;
 
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -513,7 +556,7 @@ function GameScreen({
       if (intervalId) clearInterval(intervalId);
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [round?.id, round?.endsAt, code, onRefresh]);
+  }, [round?.id, round?.endsAt, round?.status, code, onRefresh]);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
@@ -527,12 +570,16 @@ function GameScreen({
             />
             <span
               className={`font-display text-3xl tabular-nums ${
-                remainingSec !== null && remainingSec <= 10
+                round?.status === "ACTIVE" &&
+                remainingSec !== null &&
+                remainingSec <= 10
                   ? "text-accent-red"
                   : "text-slate-900"
               }`}
             >
-              {remainingSec === null ? "—" : `${remainingSec}s`}
+              {round?.status === "ACTIVE" && remainingSec !== null
+                ? `${remainingSec}s`
+                : "—"}
             </span>
           </div>
           {picker && (
@@ -564,7 +611,13 @@ function GameScreen({
             />
           )}
           {round?.status === "ENDED" && state.lastReveal && (
-            <RevealPhase reveal={state.lastReveal} nextIn={remainingSec} />
+            <RevealPhase
+              code={code}
+              reveal={state.lastReveal}
+              isHost={me.isHost}
+              isLastRound={state.currentRoundNumber >= state.totalRounds}
+              onRefresh={onRefresh}
+            />
           )}
         </div>
       </section>
@@ -577,6 +630,7 @@ function GameScreen({
           amPicker={amPicker}
           iAlreadyGuessed={iAlreadyGuessed}
           roundActive={round?.status === "ACTIVE"}
+          typingAt={typingAt}
         />
       </aside>
     </div>
@@ -965,23 +1019,45 @@ function CategoriesList({
 }
 
 function RevealPhase({
+  code,
   reveal,
-  nextIn,
+  isHost,
+  isLastRound,
+  onRefresh,
 }: {
+  code: string;
   reveal: NonNullable<LobbyState["lastReveal"]>;
-  nextIn: number | null;
+  isHost: boolean;
+  isLastRound: boolean;
+  onRefresh: () => void;
 }) {
+  const [advancing, setAdvancing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function advance() {
+    setAdvancing(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/lobbies/${code}/next`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
+        setError(b.error ?? "Couldn't advance");
+        return;
+      }
+      onRefresh();
+    } finally {
+      setAdvancing(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="brut-sticker bg-accent-green text-slate-900">
           Reveal
         </span>
-        {nextIn !== null && nextIn > 0 && (
-          <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
-            Next round in {nextIn}s
-          </span>
-        )}
       </div>
       <div className="mt-4 flex flex-col gap-4 sm:flex-row">
         {reveal.thumbnailUrl && (
@@ -1023,6 +1099,30 @@ function RevealPhase({
           />
         </div>
       )}
+      <div className="mt-5 flex items-center justify-end gap-3">
+        {error && (
+          <span className="text-xs font-bold text-accent-red">{error}</span>
+        )}
+        {isHost ? (
+          <button
+            type="button"
+            onClick={advance}
+            disabled={advancing}
+            className="brut-btn bg-accent-yellow text-slate-900"
+          >
+            {advancing ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+            ) : (
+              <Play className="h-4 w-4" fill="currentColor" strokeWidth={3} />
+            )}
+            {isLastRound ? "See final scores" : "Next round"}
+          </button>
+        ) : (
+          <p className="text-sm font-bold text-slate-500">
+            Waiting for the host to start the next round…
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1076,70 +1176,24 @@ function ChatBox({
   amPicker,
   iAlreadyGuessed,
   roundActive,
+  typingAt,
 }: {
   code: string;
   state: LobbyState;
   amPicker: boolean;
   iAlreadyGuessed: boolean;
   roundActive: boolean;
+  typingAt: Record<string, number>;
 }) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const lastTypingEmitRef = useRef<number>(0);
 
-  // memberId → timestamp of their last "typing" signal
-  const [typingAt, setTypingAt] = useState<Record<string, number>>({});
-
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [state.messages.length]);
-
-  // Subscribe to client-typing events on the presence channel.
-  useEffect(() => {
-    if (!pusherClientConfigured()) return;
-    const p = getPusherClient();
-    if (!p) return;
-    const ch = p.channel(lobbyChannelName(code));
-    if (!ch) return;
-    type TypingMeta = { user_id?: string };
-    const onTyping = (_data: unknown, meta?: TypingMeta) => {
-      if (!meta?.user_id) return;
-      setTypingAt((prev) => ({ ...prev, [meta.user_id!]: Date.now() }));
-    };
-    const onStop = (_data: unknown, meta?: TypingMeta) => {
-      if (!meta?.user_id) return;
-      setTypingAt((prev) => {
-        const out = { ...prev };
-        delete out[meta.user_id!];
-        return out;
-      });
-    };
-    ch.bind("client-typing", onTyping);
-    ch.bind("client-stop-typing", onStop);
-    return () => {
-      ch.unbind("client-typing", onTyping);
-      ch.unbind("client-stop-typing", onStop);
-    };
-  }, [code]);
-
-  // Expire stale typing signals (>4s old) every 1s.
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTypingAt((prev) => {
-        const now = Date.now();
-        let changed = false;
-        const out: Record<string, number> = {};
-        for (const [k, t] of Object.entries(prev)) {
-          if (now - t < 4000) out[k] = t;
-          else changed = true;
-        }
-        return changed ? out : prev;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const placeholder = !roundActive
     ? "Chat…"
@@ -1159,7 +1213,7 @@ function ChatBox({
     lastTypingEmitRef.current = now;
     try {
       (ch as unknown as {
-        trigger: (event: string, data: unknown) => void;
+        trigger: (event: string, data: unknown) => boolean;
       }).trigger("client-typing", {});
     } catch {
       // ignore — not all channel states support client events
@@ -1174,7 +1228,7 @@ function ChatBox({
     lastTypingEmitRef.current = 0;
     try {
       (ch as unknown as {
-        trigger: (event: string, data: unknown) => void;
+        trigger: (event: string, data: unknown) => boolean;
       }).trigger("client-stop-typing", {});
     } catch {
       // ignore

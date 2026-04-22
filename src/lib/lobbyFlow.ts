@@ -8,7 +8,6 @@ import { filterCategories } from "@/lib/filterCategories";
 const GUESS_BASE = 50;
 const GUESS_TIME_BONUS = 200; // scaled by timeFraction
 const ORDER_BONUS = [30, 20, 10, 5, 0]; // 1st/2nd/3rd/4th correct guesser
-const NEXT_ROUND_DELAY_MS = 4000;
 
 type MemberRow = {
   id: string;
@@ -112,10 +111,10 @@ async function loadLobbyByCode(code: string) {
 
 /**
  * Opportunistic clock tick — called from every API entry point so that
- * a game never stalls just because nobody poked the server. Two jobs:
+ * a game never stalls just because nobody poked the server. Job:
  *   • If the current round is ACTIVE and its timer expired → end it.
- *   • If the current round is ENDED and the reveal delay passed →
- *     advance to the next round (or finish the game).
+ *
+ * Advancing past an ENDED round is now host-driven (see advanceNext).
  */
 export async function tickLobby(code: string): Promise<void> {
   const lobby = await loadLobbyByCode(code);
@@ -132,15 +131,29 @@ export async function tickLobby(code: string): Promise<void> {
     await endRound(lobby, round);
     return;
   }
+}
 
-  if (
-    round.status === "ENDED" &&
-    round.endsAt &&
-    round.endsAt.getTime() <= now
-  ) {
-    await advanceAfterReveal(lobby, round);
-    return;
-  }
+/**
+ * Host-only. Advance past an ENDED round to the next round, or finish
+ * the game if we're out of rounds.
+ */
+export async function advanceNext(
+  code: string,
+  ownerId: string
+): Promise<void> {
+  const lobby = await loadLobbyByCode(code);
+  if (!lobby) throw new FlowError(404, "Lobby not found");
+  if (lobby.status !== "IN_GAME")
+    throw new FlowError(409, "Game isn't in progress.");
+  const me = lobby.members.find((m) => m.userId === ownerId);
+  if (!me || !me.isHost)
+    throw new FlowError(403, "Only the host can start the next round.");
+  const round = lobby.rounds[0];
+  if (!round)
+    throw new FlowError(409, "No round to advance past.");
+  if (round.status !== "ENDED")
+    throw new FlowError(409, "Current round hasn't ended yet.");
+  await advanceAfterReveal(lobby, round);
 }
 
 /** Host-only. Creates round 1 in PICKING (freestyle) or ACTIVE (set) state. */
@@ -509,11 +522,11 @@ async function endRound(
 ): Promise<void> {
   // Atomic transition — only the caller that actually flips the status
   // wins, so picker bonus + broadcast happen exactly once even when a
-  // correct-guess handler and the timer-expiry tick race.
-  const nextRoundAt = new Date(Date.now() + NEXT_ROUND_DELAY_MS);
+  // correct-guess handler and the timer-expiry tick race. We leave the
+  // ACTIVE-phase endsAt in place; advancing is now host-driven.
   const transition = await prisma.lobbyRound.updateMany({
     where: { id: round.id, status: { in: ["ACTIVE", "PICKING"] } },
-    data: { status: "ENDED", endsAt: nextRoundAt },
+    data: { status: "ENDED" },
   });
   if (transition.count === 0) {
     // Someone else already ended this round.
@@ -568,7 +581,6 @@ async function endRound(
       displayName: m.displayName,
       score: m.score,
     })),
-    nextRoundAt: nextRoundAt.toISOString(),
   });
 }
 
