@@ -105,6 +105,7 @@ export type LobbyRoundView = {
   pickerMemberId: string | null;
   status: "PICKING" | "ACTIVE" | "ENDED";
   categories: string[] | null;
+  customHints: string[];
   startsAt: string | null;
   endsAt: string | null;
 };
@@ -118,6 +119,7 @@ export type LobbyRoundReveal = {
   thumbnailUrl: string | null;
   difficulty: number | null;
   categories: string[];
+  customHints: string[];
 };
 
 export type LobbyMessageDTO = {

@@ -14,10 +14,13 @@ import {
   Loader2,
   Lock,
   Play,
+  Plus,
   Send,
   Share2,
+  StopCircle,
   Trophy,
   Users,
+  X,
 } from "lucide-react";
 import WikipediaAutocomplete from "@/components/WikipediaAutocomplete";
 import {
@@ -27,6 +30,7 @@ import {
 } from "@/lib/pusherClient";
 import { sound } from "@/lib/sound";
 import type {
+  FetchedArticlePreview,
   LobbyMemberDTO,
   LobbyMessageDTO,
   LobbyState,
@@ -145,7 +149,12 @@ export default function LobbyPage({
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:py-10">
-      <LobbyHeader code={code} state={state} router={router} />
+      <LobbyHeader
+        code={code}
+        state={state}
+        router={router}
+        onRefresh={refresh}
+      />
 
       {state.status === "WAITING" ? (
         <WaitingRoom code={code} state={state} onRefresh={refresh} />
@@ -164,12 +173,15 @@ function LobbyHeader({
   code,
   state,
   router,
+  onRefresh,
 }: {
   code: string;
   state: LobbyState;
   router: ReturnType<typeof useRouter>;
+  onRefresh: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [ending, setEnding] = useState(false);
 
   async function copyLink() {
     const url = `${window.location.origin}/multiplayer/${code}`;
@@ -181,6 +193,29 @@ function LobbyHeader({
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
+
+  async function endRoom() {
+    const ok = confirm(
+      "End the room now? Everyone will see the final scoreboard."
+    );
+    if (!ok) return;
+    setEnding(true);
+    try {
+      const res = await fetch(`/api/lobbies/${code}/end`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
+        alert(b.error ?? "Failed to end room");
+      }
+      onRefresh();
+    } finally {
+      setEnding(false);
+    }
+  }
+
+  const canEnd =
+    state.me?.isHost && state.status !== "ENDED";
 
   return (
     <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -213,24 +248,42 @@ function LobbyHeader({
           {code}
         </span>
       </div>
-      <button
-        type="button"
-        onClick={copyLink}
-        className={`brut-btn brut-btn-sm ${
-          copied ? "bg-accent-green" : "bg-accent-pink"
-        } text-slate-900`}
-        data-silent
-      >
-        {copied ? (
-          <>
-            <Copy className="h-4 w-4" strokeWidth={2.5} /> Copied
-          </>
-        ) : (
-          <>
-            <Share2 className="h-4 w-4" strokeWidth={2.5} /> Share link
-          </>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={copyLink}
+          className={`brut-btn brut-btn-sm ${
+            copied ? "bg-accent-green" : "bg-accent-pink"
+          } text-slate-900`}
+          data-silent
+        >
+          {copied ? (
+            <>
+              <Copy className="h-4 w-4" strokeWidth={2.5} /> Copied
+            </>
+          ) : (
+            <>
+              <Share2 className="h-4 w-4" strokeWidth={2.5} /> Share
+            </>
+          )}
+        </button>
+        {canEnd && (
+          <button
+            type="button"
+            onClick={endRoom}
+            disabled={ending}
+            className="brut-btn brut-btn-sm bg-accent-red text-white"
+            title="End the room for everyone"
+          >
+            {ending ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+            ) : (
+              <StopCircle className="h-4 w-4" strokeWidth={2.5} />
+            )}
+            End room
+          </button>
         )}
-      </button>
+      </div>
     </header>
   );
 }
@@ -402,19 +455,33 @@ function GameScreen({
   const remainingSec =
     remainingMs !== null ? Math.ceil(remainingMs / 1000) : null;
 
-  // Kick a tick when the timer hits zero so the server ends the round / advances.
-  const tickedRef = useRef<string | null>(null);
+  // Poke the server until the round advances. Covers the case where a
+  // single tick's effect didn't take (Pusher hiccup, network blip). The
+  // effect tears down as soon as round.id or endsAt change.
   useEffect(() => {
     if (!round) return;
-    if (remainingMs === null) return;
-    if (remainingMs > 0) return;
-    const key = `${round.id}:${round.status}`;
-    if (tickedRef.current === key) return;
-    tickedRef.current = key;
-    fetch(`/api/lobbies/${code}/tick`, { method: "POST" })
-      .catch(() => {})
-      .finally(() => onRefresh());
-  }, [round, remainingMs, code, onRefresh]);
+    const endsAtMsLocal = round.endsAt
+      ? new Date(round.endsAt).getTime()
+      : null;
+    if (endsAtMsLocal === null) return; // PICKING — no deadline
+    if (Date.now() < endsAtMsLocal) return; // timer still running
+    let cancelled = false;
+    const poke = async () => {
+      if (cancelled) return;
+      try {
+        await fetch(`/api/lobbies/${code}/tick`, { method: "POST" });
+      } catch {
+        // ignore
+      }
+      if (!cancelled) onRefresh();
+    };
+    poke();
+    const id = setInterval(poke, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [round?.id, round?.endsAt, code, onRefresh]);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
@@ -495,30 +562,78 @@ function PickingPhase({
   pickerName: string;
   onRefresh: () => void;
 }) {
+  const [preview, setPreview] = useState<FetchedArticlePreview | null>(null);
+  const [pendingInput, setPendingInput] = useState<string>("");
+  const [customHints, setCustomHints] = useState<string[]>([]);
+  const [hintDraft, setHintDraft] = useState<string>("");
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(urlOrTitle: string) {
-    setSubmitting(true);
+  async function fetchPreview(urlOrTitle: string) {
+    setLoadingPreview(true);
     setError(null);
     try {
-      const res = await fetch(`/api/lobbies/${code}/pick`, {
+      const res = await fetch("/api/wikipedia/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ urlOrTitle }),
       });
       if (!res.ok) {
         const b = await res.json().catch(() => ({}));
+        setError(b.error ?? "Fetch failed");
+        return;
+      }
+      const data = (await res.json()) as FetchedArticlePreview;
+      setPreview(data);
+      setPendingInput(urlOrTitle);
+      setCustomHints([]);
+    } finally {
+      setLoadingPreview(false);
+    }
+  }
+
+  function addHint() {
+    const h = hintDraft.trim();
+    if (!h || customHints.includes(h)) return;
+    if (customHints.length >= 10) return;
+    setCustomHints([...customHints, h]);
+    setHintDraft("");
+  }
+
+  function removeHint(h: string) {
+    setCustomHints(customHints.filter((x) => x !== h));
+  }
+
+  async function lockIn() {
+    if (!preview || !pendingInput) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/lobbies/${code}/pick`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urlOrTitle: pendingInput,
+          customHints,
+        }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
         setError(b.error ?? "Pick failed");
-        // If the server disagrees about whose turn it is, the client
-        // is probably stale — pull fresh state to resolve.
-        if (res.status === 403 || res.status === 409) {
-          onRefresh();
-        }
+        if (res.status === 403 || res.status === 409) onRefresh();
       }
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function cancelPreview() {
+    setPreview(null);
+    setPendingInput("");
+    setCustomHints([]);
+    setHintDraft("");
+    setError(null);
   }
 
   if (!amPicker) {
@@ -537,30 +652,184 @@ function PickingPhase({
     );
   }
 
+  // Stage 1: search for an article.
+  if (!preview) {
+    return (
+      <div>
+        <span className="brut-sticker bg-accent-yellow text-slate-900">
+          Your turn
+        </span>
+        <h3 className="mt-3 font-display text-2xl text-slate-900">
+          Pick an article for everyone to guess.
+        </h3>
+        <p className="mt-1 text-sm font-semibold text-slate-600">
+          Type or paste any Wikipedia article. The more niche yet guessable,
+          the more points you get.
+        </p>
+        <div className="mt-4">
+          <WikipediaAutocomplete
+            onSubmit={fetchPreview}
+            loading={loadingPreview}
+            placeholder="Search Wikipedia or paste a URL…"
+          />
+        </div>
+        {error && (
+          <div className="mt-3 rounded-lg border-[2.5px] border-slate-900 bg-accent-red/20 p-2 text-xs font-bold text-slate-900">
+            {error}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Stage 2: preview + hints + lock-in.
+  const categoryCount = preview.categories.length;
+  const tooFew = categoryCount < 3;
+
   return (
     <div>
-      <span className="brut-sticker bg-accent-yellow text-slate-900">
-        Your turn
-      </span>
-      <h3 className="mt-3 font-display text-2xl text-slate-900">
-        Pick an article for everyone to guess.
-      </h3>
-      <p className="mt-1 text-sm font-semibold text-slate-600">
-        Type or paste any Wikipedia article. The more niche yet guessable,
-        the more points you get.
-      </p>
-      <div className="mt-4">
-        <WikipediaAutocomplete
-          onSubmit={submit}
-          loading={submitting}
-          placeholder="Search Wikipedia or paste a URL…"
-        />
+      <div className="flex items-center gap-2">
+        <span className="brut-sticker bg-accent-yellow text-slate-900">
+          Preview
+        </span>
+        <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">
+          Only you can see this
+        </span>
       </div>
+
+      <div className="mt-4 flex items-start gap-4">
+        {preview.thumbnailUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={preview.thumbnailUrl}
+            alt={preview.title}
+            className="h-24 w-24 shrink-0 rounded-lg border-[3px] border-slate-900 object-cover"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="font-display text-2xl leading-tight text-slate-900">
+            {preview.title}
+          </div>
+          <div className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">
+            {categoryCount} useful ·{" "}
+            {preview.rawCategoryCount} total
+          </div>
+        </div>
+      </div>
+
+      {preview.summary && (
+        <p className="mt-3 line-clamp-3 text-sm text-slate-700">
+          {preview.summary}
+        </p>
+      )}
+
+      {tooFew && (
+        <div className="mt-4 rounded-lg border-[2.5px] border-slate-900 bg-accent-yellow p-2 text-xs font-bold text-slate-900">
+          Only {categoryCount} useful{" "}
+          {categoryCount === 1 ? "category" : "categories"}. The round may
+          be rough — pick something else if you can.
+        </div>
+      )}
+
+      <div className="mt-4 text-xs font-extrabold uppercase tracking-widest text-slate-600">
+        Categories everyone sees
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {preview.categories.length === 0 ? (
+          <span className="text-sm italic text-slate-500">None.</span>
+        ) : (
+          preview.categories.map((c) => (
+            <span
+              key={c}
+              className="rounded-full border-[2.5px] border-slate-900 bg-white px-2.5 py-0.5 text-xs font-bold text-slate-900"
+            >
+              {c}
+            </span>
+          ))
+        )}
+      </div>
+
+      <div className="mt-5 text-xs font-extrabold uppercase tracking-widest text-slate-600">
+        Your own hints{" "}
+        <span className="font-medium text-slate-400 normal-case tracking-normal">
+          (optional — shown in green to guessers)
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {customHints.map((h) => (
+          <span
+            key={h}
+            className="inline-flex items-center gap-1 rounded-full border-[2.5px] border-slate-900 bg-accent-green px-2.5 py-0.5 text-xs font-extrabold text-slate-900"
+          >
+            {h}
+            <button
+              type="button"
+              onClick={() => removeHint(h)}
+              className="brut-btn-chip bg-white p-0.5"
+              aria-label={`Remove ${h}`}
+            >
+              <X className="h-3 w-3" strokeWidth={3} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input
+          value={hintDraft}
+          onChange={(e) => setHintDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addHint();
+            }
+          }}
+          placeholder="Add a custom hint…"
+          disabled={submitting || customHints.length >= 10}
+          maxLength={120}
+          className="brut-input flex-1 py-2 text-sm"
+        />
+        <button
+          type="button"
+          onClick={addHint}
+          disabled={
+            submitting || !hintDraft.trim() || customHints.length >= 10
+          }
+          className="brut-btn brut-btn-sm bg-accent-green text-slate-900"
+        >
+          <Plus className="h-4 w-4" strokeWidth={3} /> Add
+        </button>
+      </div>
+
       {error && (
         <div className="mt-3 rounded-lg border-[2.5px] border-slate-900 bg-accent-red/20 p-2 text-xs font-bold text-slate-900">
           {error}
         </div>
       )}
+
+      <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={cancelPreview}
+          disabled={submitting}
+          className="brut-btn brut-btn-sm bg-white text-slate-900"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Pick a
+          different one
+        </button>
+        <button
+          type="button"
+          onClick={lockIn}
+          disabled={submitting || preview.categories.length === 0}
+          className="brut-btn bg-accent-yellow text-slate-900"
+        >
+          {submitting ? (
+            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+          ) : (
+            <Check className="h-4 w-4" strokeWidth={3} />
+          )}
+          Lock in & start round
+        </button>
+      </div>
     </div>
   );
 }
@@ -584,7 +853,10 @@ function ActivePhase({
           Wait while everyone guesses your article. You can&rsquo;t guess
           your own pick, but chat works.
         </p>
-        <CategoriesList cats={round.categories ?? []} />
+        <CategoriesList
+          cats={round.categories ?? []}
+          customHints={round.customHints ?? []}
+        />
       </div>
     );
   }
@@ -605,29 +877,48 @@ function ActivePhase({
         Type your guess in the chat on the right. Exact and close matches
         count.
       </p>
-      <CategoriesList cats={round.categories ?? []} />
+      <CategoriesList
+        cats={round.categories ?? []}
+        customHints={round.customHints ?? []}
+      />
     </div>
   );
 }
 
-function CategoriesList({ cats }: { cats: string[] }) {
-  if (cats.length === 0) {
+function CategoriesList({
+  cats,
+  customHints,
+}: {
+  cats: string[];
+  customHints: string[];
+}) {
+  const custom = customHints.map((text) => ({ text, custom: true as const }));
+  const wiki = [...cats]
+    .sort((a, b) => a.localeCompare(b))
+    .map((text) => ({ text, custom: false as const }));
+  const hints = [...custom, ...wiki];
+  if (hints.length === 0) {
     return (
-      <p className="mt-4 text-sm italic text-slate-500">
-        No categories yet.
-      </p>
+      <p className="mt-4 text-sm italic text-slate-500">No categories yet.</p>
     );
   }
-  const sorted = [...cats].sort((a, b) => a.localeCompare(b));
   return (
     <p
       className="mt-4 text-[17px] leading-[1.9] text-slate-900"
       style={{ textWrap: "pretty" }}
     >
-      {sorted.map((c, i) => (
-        <span key={`${c}-${i}`} className="whitespace-normal">
-          <span className="font-medium">{c}</span>
-          {i < sorted.length - 1 && (
+      {hints.map((h, i) => (
+        <span key={`${h.text}-${i}`} className="whitespace-normal">
+          <span
+            className={
+              h.custom
+                ? "rounded-sm bg-accent-green/45 px-1 font-bold text-slate-900"
+                : "font-medium"
+            }
+          >
+            {h.text}
+          </span>
+          {i < hints.length - 1 && (
             <span
               className="mx-2.5 inline-block align-middle text-amber-400/80"
               aria-hidden
@@ -691,6 +982,15 @@ function RevealPhase({
           )}
         </div>
       </div>
+      {(reveal.categories.length > 0 ||
+        (reveal.customHints?.length ?? 0) > 0) && (
+        <div className="mt-5 border-t-[3px] border-slate-900 pt-4">
+          <CategoriesList
+            cats={reveal.categories}
+            customHints={reveal.customHints ?? []}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -754,11 +1054,60 @@ function ChatBox({
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const lastTypingEmitRef = useRef<number>(0);
+
+  // memberId → timestamp of their last "typing" signal
+  const [typingAt, setTypingAt] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [state.messages.length]);
+
+  // Subscribe to client-typing events on the presence channel.
+  useEffect(() => {
+    if (!pusherClientConfigured()) return;
+    const p = getPusherClient();
+    if (!p) return;
+    const ch = p.channel(lobbyChannelName(code));
+    if (!ch) return;
+    type TypingMeta = { user_id?: string };
+    const onTyping = (_data: unknown, meta?: TypingMeta) => {
+      if (!meta?.user_id) return;
+      setTypingAt((prev) => ({ ...prev, [meta.user_id!]: Date.now() }));
+    };
+    const onStop = (_data: unknown, meta?: TypingMeta) => {
+      if (!meta?.user_id) return;
+      setTypingAt((prev) => {
+        const out = { ...prev };
+        delete out[meta.user_id!];
+        return out;
+      });
+    };
+    ch.bind("client-typing", onTyping);
+    ch.bind("client-stop-typing", onStop);
+    return () => {
+      ch.unbind("client-typing", onTyping);
+      ch.unbind("client-stop-typing", onStop);
+    };
+  }, [code]);
+
+  // Expire stale typing signals (>4s old) every 1s.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTypingAt((prev) => {
+        const now = Date.now();
+        let changed = false;
+        const out: Record<string, number> = {};
+        for (const [k, t] of Object.entries(prev)) {
+          if (now - t < 4000) out[k] = t;
+          else changed = true;
+        }
+        return changed ? out : prev;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const placeholder = !roundActive
     ? "Chat…"
@@ -767,6 +1116,38 @@ function ChatBox({
       : iAlreadyGuessed
         ? "You got it — just chat now"
         : "Type your guess…";
+
+  function emitTyping() {
+    const p = getPusherClient();
+    if (!p) return;
+    const ch = p.channel(lobbyChannelName(code));
+    if (!ch) return;
+    const now = Date.now();
+    if (now - lastTypingEmitRef.current < 2000) return;
+    lastTypingEmitRef.current = now;
+    try {
+      (ch as unknown as {
+        trigger: (event: string, data: unknown) => void;
+      }).trigger("client-typing", {});
+    } catch {
+      // ignore — not all channel states support client events
+    }
+  }
+
+  function emitStop() {
+    const p = getPusherClient();
+    if (!p) return;
+    const ch = p.channel(lobbyChannelName(code));
+    if (!ch) return;
+    lastTypingEmitRef.current = 0;
+    try {
+      (ch as unknown as {
+        trigger: (event: string, data: unknown) => void;
+      }).trigger("client-stop-typing", {});
+    } catch {
+      // ignore
+    }
+  }
 
   async function send() {
     const text = value.trim();
@@ -780,11 +1161,20 @@ function ChatBox({
       });
       if (res.ok) {
         setValue("");
+        emitStop();
       }
     } finally {
       setSending(false);
     }
   }
+
+  // Compose typing indicator. Exclude me.
+  const typingNames = Object.keys(typingAt)
+    .filter((id) => id !== state.me?.id)
+    .map(
+      (id) => state.members.find((m) => m.id === id)?.displayName ?? null
+    )
+    .filter((n): n is string => !!n);
 
   return (
     <div className="brut-card flex h-[440px] flex-col overflow-hidden bg-white p-0">
@@ -807,6 +1197,9 @@ function ChatBox({
           </ul>
         )}
       </div>
+      <div className="min-h-[18px] border-t border-slate-200 px-3 py-0.5 text-[11px] font-semibold italic text-slate-500">
+        {formatTypingIndicator(typingNames)}
+      </div>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -816,7 +1209,11 @@ function ChatBox({
       >
         <input
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            if (e.target.value.trim()) emitTyping();
+          }}
+          onBlur={emitStop}
           placeholder={placeholder}
           maxLength={200}
           className="min-w-0 flex-1 rounded-md border-2 border-slate-900 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent-yellow"
@@ -833,6 +1230,13 @@ function ChatBox({
       </form>
     </div>
   );
+}
+
+function formatTypingIndicator(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  return `${names.length} players are typing…`;
 }
 
 function ChatLine({ m }: { m: LobbyMessageDTO }) {

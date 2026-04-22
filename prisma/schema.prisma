@@ -111,6 +111,7 @@ model LobbyRound {
   articlePageId        Int?
   articleCategories    String?  // JSON string[]
   articleAliases       String?  // JSON string[]
+  articleCustomHints   String?  // JSON string[] — picker-added extra clues
   articleCustomAliases String?  // JSON string[]
   articleSummary       String?
   articleThumbnailUrl  String?

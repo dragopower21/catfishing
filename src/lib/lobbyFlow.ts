@@ -29,6 +29,7 @@ type RoundRow = {
   articleUrl: string | null;
   articleCategories: string | null;
   articleAliases: string | null;
+  articleCustomHints: string | null;
   articleCustomAliases: string | null;
   articleSummary: string | null;
   articleThumbnailUrl: string | null;
@@ -72,10 +73,9 @@ export function publicRoundView(round: RoundRow) {
     categories: round.articleCategories
       ? (JSON.parse(round.articleCategories) as string[])
       : null,
-    thumbnailUrl:
-      round.status === "ACTIVE" || round.status === "ENDED"
-        ? null
-        : null,
+    customHints: round.articleCustomHints
+      ? (JSON.parse(round.articleCustomHints) as string[])
+      : [],
     startsAt: round.startsAt?.toISOString() ?? null,
     endsAt: round.endsAt?.toISOString() ?? null,
   };
@@ -93,6 +93,9 @@ export function revealRoundView(round: RoundRow) {
     difficulty: round.articleDifficulty,
     categories: round.articleCategories
       ? (JSON.parse(round.articleCategories) as string[])
+      : [],
+    customHints: round.articleCustomHints
+      ? (JSON.parse(round.articleCustomHints) as string[])
       : [],
   };
 }
@@ -253,7 +256,8 @@ async function startSetBasedRound(
 export async function submitPick(
   code: string,
   ownerId: string,
-  urlOrTitle: string
+  urlOrTitle: string,
+  customHintsInput?: unknown
 ): Promise<void> {
   await tickLobby(code);
   const lobby = await loadLobbyByCode(code);
@@ -312,6 +316,20 @@ export async function submitPick(
     );
   }
 
+  // Sanitize picker-provided custom hints (cap count + length).
+  let customHints: string[] = [];
+  if (Array.isArray(customHintsInput)) {
+    const seen = new Set<string>();
+    for (const h of customHintsInput) {
+      if (typeof h !== "string") continue;
+      const trimmed = h.trim().slice(0, 120);
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      customHints.push(trimmed);
+      if (customHints.length >= 10) break;
+    }
+  }
+
   const now = new Date();
   const endsAt = new Date(now.getTime() + lobby.roundDuration * 1000);
 
@@ -324,6 +342,7 @@ export async function submitPick(
       articlePageId: fetched.pageId,
       articleCategories: JSON.stringify(filtered),
       articleAliases: JSON.stringify(fetched.aliases),
+      articleCustomHints: JSON.stringify(customHints),
       articleCustomAliases: JSON.stringify([]),
       articleSummary: fetched.summary,
       articleThumbnailUrl: fetched.thumbnailUrl,
@@ -337,6 +356,30 @@ export async function submitPick(
     round: publicRoundView(updated),
     picker: { id: me.id, displayName: me.displayName },
   });
+}
+
+/** Host-only: end the whole game immediately. */
+export async function endGameByHost(
+  code: string,
+  ownerId: string
+): Promise<void> {
+  const lobby = await loadLobbyByCode(code);
+  if (!lobby) throw new FlowError(404, "Lobby not found");
+  const me = lobby.members.find((m) => m.userId === ownerId);
+  if (!me) throw new FlowError(403, "Not a member");
+  if (!me.isHost) throw new FlowError(403, "Only the host can end the room");
+  if (lobby.status === "ENDED") return;
+
+  // Close any in-flight round so data stays consistent.
+  const round = lobby.rounds[0];
+  if (round && round.status !== "ENDED") {
+    await prisma.lobbyRound.updateMany({
+      where: { id: round.id, status: { in: ["ACTIVE", "PICKING"] } },
+      data: { status: "ENDED", endsAt: new Date() },
+    });
+  }
+
+  await endGame(lobby);
 }
 
 /**
