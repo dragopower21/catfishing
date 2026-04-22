@@ -62,20 +62,33 @@ export default function LobbyPage({
     setLoading(false);
   }, [code]);
 
+  // Keep a mutable ref to the latest refresh fn so event handlers
+  // bound once in a stable-deps effect can always call the latest.
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  // Subscribe to Pusher presence channel once we're a member.
+  // Is the current browser an actual lobby member? Booleanize so
+  // that refresh-driven state updates don't churn the subscription.
+  const isMember = Boolean(state?.me);
+
+  // Subscribe to Pusher presence channel once we're a member. Deps are
+  // `isMember + code` so the subscription is stable across state
+  // refreshes — otherwise we'd tear down + re-subscribe on every GET,
+  // which can cause the presence auth to fail partway and drop events.
   useEffect(() => {
-    if (!state?.me) return;
+    if (!isMember) return;
     if (!pusherClientConfigured()) return;
     const p = getPusherClient();
     if (!p) return;
     const ch = p.subscribe(lobbyChannelName(code));
 
-    // Any significant state event → refetch full state. Keeps UI simple.
-    const bust = () => refresh();
+    const bust = () => refreshRef.current();
     const events = [
       "member-joined",
       "member-left",
@@ -88,34 +101,33 @@ export default function LobbyPage({
     ];
     events.forEach((e) => ch.bind(e, bust));
 
-    // Chat doesn't need a full refresh — append the message locally.
-    ch.bind("chat-message", (msg: LobbyMessageDTO) => {
+    const onChat = (msg: LobbyMessageDTO) => {
       setState((prev) =>
         prev ? { ...prev, messages: [...prev.messages, msg] } : prev
       );
-    });
-
-    return () => {
-      events.forEach((e) => ch.unbind(e));
-      ch.unbind("chat-message");
-      p.unsubscribe(lobbyChannelName(code));
     };
-  }, [state?.me, code, refresh]);
+    ch.bind("chat-message", onChat);
 
-  // Play sound when we hear about a correct guess (subtle)
-  useEffect(() => {
-    if (!state?.me) return;
-    if (!pusherClientConfigured()) return;
-    const p = getPusherClient();
-    if (!p) return;
-    const ch = p.channel(lobbyChannelName(code));
-    if (!ch) return;
     const onCorrect = () => sound.correct();
     ch.bind("correct-guess", onCorrect);
+
     return () => {
+      events.forEach((e) => ch.unbind(e, bust));
+      ch.unbind("chat-message", onChat);
       ch.unbind("correct-guess", onCorrect);
+      p.unsubscribe(lobbyChannelName(code));
     };
-  }, [state?.me, code]);
+  }, [isMember, code]);
+
+  // Safety-net: poll state every 5s so even a completely silent Pusher
+  // connection still eventually surfaces round advances.
+  useEffect(() => {
+    if (!isMember) return;
+    const id = setInterval(() => {
+      refreshRef.current();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [isMember]);
 
   if (loading) {
     return (
