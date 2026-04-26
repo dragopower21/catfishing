@@ -13,6 +13,7 @@ import {
   Gamepad2,
   Loader2,
   Lock,
+  Monitor,
   Play,
   Plus,
   Send,
@@ -354,9 +355,31 @@ function WaitingRoom({
   onRefresh: () => void;
 }) {
   const me = state.me!;
-  const canStart = me.isHost && state.memberCount >= 2;
+  const minPlayers = state.mode === "FREESTYLE" ? 2 : 1;
+  const canStart = me.isHost && state.activePlayerCount >= minPlayers;
   const [starting, setStarting] = useState(false);
+  const [updatingHostMode, setUpdatingHostMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function updateHostMode(hostIsPlayer: boolean) {
+    setUpdatingHostMode(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/lobbies/${code}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostIsPlayer }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
+        setError(b.error ?? "Failed to update host mode");
+        return;
+      }
+      onRefresh();
+    } finally {
+      setUpdatingHostMode(false);
+    }
+  }
 
   async function start() {
     setStarting(true);
@@ -396,6 +419,33 @@ function WaitingRoom({
         </div>
       </div>
 
+      <div className="mt-5 rounded-lg border-[2.5px] border-slate-900 bg-paper/60 p-3">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={state.hostIsPlayer}
+            disabled={!me.isHost || updatingHostMode}
+            onChange={(e) => updateHostMode(e.target.checked)}
+            className="mt-1 h-5 w-5 accent-slate-900 disabled:opacity-50"
+          />
+          <span className="min-w-0">
+            <span className="flex items-center gap-2 text-sm font-extrabold text-slate-900">
+              <Monitor className="h-4 w-4" strokeWidth={2.5} />
+              Host plays
+            </span>
+            <span className="mt-1 block text-xs font-semibold text-slate-600">
+              {state.hostIsPlayer
+                ? "The host is included in guessing, scores, and picker rotation."
+                : "The host is a spectator/controller for a shared screen."}
+            </span>
+          </span>
+        </label>
+        <div className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+          {state.activePlayerCount} active{" "}
+          {state.activePlayerCount === 1 ? "player" : "players"}
+        </div>
+      </div>
+
       <ul className="mt-5 space-y-2">
         {state.members.map((m) => (
           <MemberRow key={m.id} m={m} />
@@ -430,7 +480,9 @@ function WaitingRoom({
             </button>
             {!canStart && (
               <p className="text-xs font-bold text-slate-500">
-                Need at least 2 players to start.
+                {state.mode === "FREESTYLE"
+                  ? "Need at least 2 active players to start."
+                  : "Need at least 1 active player to start."}
               </p>
             )}
           </>
@@ -470,6 +522,14 @@ function MemberRow({ m }: { m: LobbyMemberDTO }) {
           <Crown className="h-3 w-3" strokeWidth={3} /> Host
         </span>
       )}
+      {!m.isPlayer && (
+        <span
+          className="inline-flex items-center gap-1 rounded-full border-2 border-slate-900 bg-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-900"
+          title="Spectator"
+        >
+          <Monitor className="h-3 w-3" strokeWidth={3} /> Spectator
+        </span>
+      )}
     </li>
   );
 }
@@ -491,6 +551,7 @@ function GameScreen({
   const round = state.currentRound;
   const picker = state.picker;
   const amPicker = picker?.id === me.id;
+  const amSpectator = !me.isPlayer;
   const iAlreadyGuessed = state.messages.some(
     (m) =>
       m.type === "CORRECT_GUESS" &&
@@ -607,6 +668,7 @@ function GameScreen({
             <ActivePhase
               round={round}
               amPicker={amPicker}
+              amSpectator={amSpectator}
               iAlreadyGuessed={iAlreadyGuessed}
             />
           )}
@@ -628,6 +690,7 @@ function GameScreen({
           code={code}
           state={state}
           amPicker={amPicker}
+          amSpectator={amSpectator}
           iAlreadyGuessed={iAlreadyGuessed}
           roundActive={round?.status === "ACTIVE"}
           typingAt={typingAt}
@@ -923,12 +986,32 @@ function PickingPhase({
 function ActivePhase({
   round,
   amPicker,
+  amSpectator,
   iAlreadyGuessed,
 }: {
   round: NonNullable<LobbyState["currentRound"]>;
   amPicker: boolean;
+  amSpectator: boolean;
   iAlreadyGuessed: boolean;
 }) {
+  if (amSpectator) {
+    return (
+      <div>
+        <span className="brut-sticker bg-accent-sky text-slate-900">
+          Spectating
+        </span>
+        <p className="mt-3 text-sm font-semibold text-slate-600">
+          This device is hosting the room display. Players guess from their
+          own devices.
+        </p>
+        <CategoriesList
+          cats={round.categories ?? []}
+          customHints={round.customHints ?? []}
+        />
+      </div>
+    );
+  }
+
   if (amPicker) {
     return (
       <div>
@@ -1130,7 +1213,7 @@ function RevealPhase({
 // ---------- Scoreboard ----------
 
 function Scoreboard({ members }: { members: LobbyMemberDTO[] }) {
-  const ranked = [...members].sort(
+  const ranked = members.filter((m) => m.isPlayer).sort(
     (a, b) => b.score - a.score || a.displayName.localeCompare(b.displayName)
   );
   return (
@@ -1174,6 +1257,7 @@ function ChatBox({
   code,
   state,
   amPicker,
+  amSpectator,
   iAlreadyGuessed,
   roundActive,
   typingAt,
@@ -1181,6 +1265,7 @@ function ChatBox({
   code: string;
   state: LobbyState;
   amPicker: boolean;
+  amSpectator: boolean;
   iAlreadyGuessed: boolean;
   roundActive: boolean;
   typingAt: Record<string, number>;
@@ -1197,6 +1282,8 @@ function ChatBox({
 
   const placeholder = !roundActive
     ? "Chat…"
+    : amSpectator
+      ? "Spectating from this device"
     : amPicker
       ? "Chat with guessers…"
       : iAlreadyGuessed
@@ -1293,26 +1380,34 @@ function ChatBox({
         }}
         className="flex items-stretch gap-1 border-t-[3px] border-slate-900 p-2"
       >
-        <input
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            if (e.target.value.trim()) emitTyping();
-          }}
-          onBlur={emitStop}
-          placeholder={placeholder}
-          maxLength={200}
-          className="min-w-0 flex-1 rounded-md border-2 border-slate-900 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent-yellow"
-        />
-        <button
-          type="submit"
-          disabled={sending || !value.trim()}
-          data-silent
-          className="brut-btn brut-btn-sm brut-btn-icon bg-accent-yellow text-slate-900"
-          aria-label="Send"
-        >
-          <Send className="h-4 w-4" strokeWidth={3} />
-        </button>
+        {amSpectator ? (
+          <div className="min-w-0 flex-1 rounded-md border-2 border-slate-900 bg-paper px-2 py-1.5 text-sm font-bold text-slate-500">
+            {placeholder}
+          </div>
+        ) : (
+          <>
+            <input
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                if (e.target.value.trim()) emitTyping();
+              }}
+              onBlur={emitStop}
+              placeholder={placeholder}
+              maxLength={200}
+              className="min-w-0 flex-1 rounded-md border-2 border-slate-900 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent-yellow"
+            />
+            <button
+              type="submit"
+              disabled={sending || !value.trim()}
+              data-silent
+              className="brut-btn brut-btn-sm brut-btn-icon bg-accent-yellow text-slate-900"
+              aria-label="Send"
+            >
+              <Send className="h-4 w-4" strokeWidth={3} />
+            </button>
+          </>
+        )}
       </form>
     </div>
   );

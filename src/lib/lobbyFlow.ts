@@ -43,6 +43,7 @@ type LobbyRow = {
   mode: string;
   setId: string | null;
   status: string;
+  hostIsPlayer: boolean;
   roundDuration: number;
   totalRounds: number;
   currentRoundNumber: number;
@@ -109,6 +110,18 @@ async function loadLobbyByCode(code: string) {
   });
 }
 
+function memberCanPlay(lobby: LobbyRow, member: MemberRow): boolean {
+  return lobby.hostIsPlayer || !member.isHost;
+}
+
+function playableMembers(lobby: LobbyWithMembersAndRounds): MemberRow[] {
+  return lobby.members.filter((m) => memberCanPlay(lobby, m));
+}
+
+function minPlayersForMode(mode: string): number {
+  return mode === "FREESTYLE" ? 2 : 1;
+}
+
 /**
  * Opportunistic clock tick — called from every API entry point so that
  * a game never stalls just because nobody poked the server. Job:
@@ -169,8 +182,16 @@ export async function startGame(
   const me = lobby.members.find((m) => m.userId === ownerId);
   if (!me || !me.isHost)
     throw new FlowError(403, "Only the host can start the game");
-  if (lobby.members.length < 2)
-    throw new FlowError(409, "Need at least 2 players");
+  const players = playableMembers(lobby);
+  const minPlayers = minPlayersForMode(lobby.mode);
+  if (players.length < minPlayers) {
+    throw new FlowError(
+      409,
+      lobby.mode === "FREESTYLE"
+        ? "Need at least 2 active players"
+        : "Need at least 1 active player"
+    );
+  }
 
   await prisma.lobby.update({
     where: { id: lobby.id },
@@ -193,7 +214,7 @@ export async function startGame(
   });
 
   if (lobby.mode === "FREESTYLE") {
-    const picker = pickNextPicker(lobby.members, null);
+    const picker = pickNextPicker(players, null);
     const round = await prisma.lobbyRound.create({
       data: {
         lobbyId: lobby.id,
@@ -330,7 +351,7 @@ export async function submitPick(
   }
 
   // Sanitize picker-provided custom hints (cap count + length).
-  let customHints: string[] = [];
+  const customHints: string[] = [];
   if (Array.isArray(customHintsInput)) {
     const seen = new Set<string>();
     for (const h of customHintsInput) {
@@ -408,6 +429,7 @@ export async function submitChat(
   if (!lobby) throw new FlowError(404, "Lobby not found");
   const me = lobby.members.find((m) => m.userId === ownerId);
   if (!me) throw new FlowError(403, "Not a member");
+  const canPlay = memberCanPlay(lobby, me);
 
   const clean = text.trim().slice(0, 200);
   if (!clean) throw new FlowError(400, "Empty message");
@@ -416,7 +438,7 @@ export async function submitChat(
   const isActive = round?.status === "ACTIVE";
   const amPicker = round && round.pickerMemberId === me.id;
 
-  if (isActive && round && !amPicker) {
+  if (isActive && round && canPlay && !amPicker) {
     const alreadyCorrect = await prisma.lobbyMessage.findFirst({
       where: {
         roundId: round.id,
@@ -460,7 +482,7 @@ export async function submitChat(
     type: "CHAT",
     createdAt: msg.createdAt.toISOString(),
   });
-  return isActive && !amPicker ? "wrong" : "chat";
+  return isActive && canPlay && !amPicker ? "wrong" : "chat";
 }
 
 async function handleCorrectGuess(
@@ -509,8 +531,9 @@ async function handleCorrectGuess(
 
   const eligibleCount =
     lobby.mode === "FREESTYLE"
-      ? lobby.members.filter((m) => m.id !== round.pickerMemberId).length
-      : lobby.members.length;
+      ? playableMembers(lobby).filter((m) => m.id !== round.pickerMemberId)
+          .length
+      : playableMembers(lobby).length;
   if (priorCount + 1 >= eligibleCount) {
     await endRound(lobby, round);
   }
@@ -603,7 +626,7 @@ async function advanceAfterReveal(
     });
 
     if (lobby.mode === "FREESTYLE") {
-      const next = pickNextPicker(lobby.members, round.pickerMemberId);
+      const next = pickNextPicker(playableMembers(lobby), round.pickerMemberId);
       const newRound = await prisma.lobbyRound.create({
         data: {
           lobbyId: lobby.id,
@@ -633,7 +656,10 @@ async function endGame(
     data: { status: "ENDED" },
   });
   const members = await prisma.lobbyMember.findMany({
-    where: { lobbyId: lobby.id },
+    where: {
+      lobbyId: lobby.id,
+      ...(lobby.hostIsPlayer ? {} : { isHost: false }),
+    },
     orderBy: [{ score: "desc" }, { joinedAt: "asc" }],
   });
   await broadcast(lobby.code, "game-ended", {

@@ -16,6 +16,7 @@ export async function POST(request: Request) {
     setId?: unknown;
     password?: unknown;
     displayName?: unknown;
+    hostIsPlayer?: unknown;
     roundDuration?: unknown;
     totalRounds?: unknown;
   };
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
 
   const mode: LobbyMode =
     body.mode === "SET_BASED" ? "SET_BASED" : "FREESTYLE";
+  const hostIsPlayer = body.hostIsPlayer !== false;
   const displayName =
     typeof body.displayName === "string"
       ? body.displayName.trim().slice(0, 40)
@@ -126,6 +128,7 @@ export async function POST(request: Request) {
       mode,
       setId,
       passwordHash,
+      hostIsPlayer,
       roundDuration,
       totalRounds,
       members: {
@@ -144,6 +147,7 @@ export async function POST(request: Request) {
       code: lobby.code,
       lobbyId: lobby.id,
       mode: lobby.mode,
+      hostIsPlayer: lobby.hostIsPlayer,
       hasPassword: Boolean(lobby.passwordHash),
     },
     { status: 201 }

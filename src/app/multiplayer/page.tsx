@@ -9,6 +9,7 @@ import {
   Loader2,
   Lock,
   LogIn,
+  Monitor,
   Plus,
   Users,
 } from "lucide-react";
@@ -79,6 +80,7 @@ function CreateForm({
 }) {
   const [mode, setMode] = useState<Mode>("FREESTYLE");
   const [displayName, setDisplayName] = useState("");
+  const [hostIsPlayer, setHostIsPlayer] = useState(true);
   const [password, setPassword] = useState("");
   const [roundDuration, setRoundDuration] = useState(80);
   const [totalRounds, setTotalRounds] = useState(8);
@@ -118,6 +120,7 @@ function CreateForm({
       const body: Record<string, unknown> = {
         mode,
         displayName,
+        hostIsPlayer,
         password: password || undefined,
         roundDuration,
         totalRounds,
@@ -216,6 +219,24 @@ function CreateForm({
           placeholder="e.g. dragon"
           className="brut-input mt-2 block w-full"
         />
+      </label>
+
+      <label className="mt-5 flex items-start gap-3 rounded-lg border-[2.5px] border-slate-900 bg-paper/60 p-3">
+        <input
+          type="checkbox"
+          checked={hostIsPlayer}
+          onChange={(e) => setHostIsPlayer(e.target.checked)}
+          className="mt-1 h-5 w-5 accent-slate-900"
+        />
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-sm font-extrabold text-slate-900">
+            <Monitor className="h-4 w-4" strokeWidth={2.5} />
+            Host plays
+          </span>
+          <span className="mt-1 block text-xs font-semibold text-slate-600">
+            Turn this off when the host device is just the shared screen.
+          </span>
+        </span>
       </label>
 
       <div

@@ -82,6 +82,7 @@ export type LobbyMemberDTO = {
   displayName: string;
   score: number;
   isHost: boolean;
+  isPlayer: boolean;
   isMe: boolean;
   joinedAt: string;
 };
@@ -91,12 +92,14 @@ export type LobbySummary = {
   mode: LobbyMode;
   status: LobbyStatus;
   hasPassword: boolean;
+  hostIsPlayer: boolean;
   setId: string | null;
   setName: string | null;
   roundDuration: number;
   totalRounds: number;
   currentRoundNumber: number;
   memberCount: number;
+  activePlayerCount: number;
 };
 
 export type LobbyRoundView = {

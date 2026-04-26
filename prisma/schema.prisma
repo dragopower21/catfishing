@@ -69,6 +69,7 @@ model Lobby {
   setId              String?  // for SET_BASED
   passwordHash       String?
   status             String   @default("WAITING") // "WAITING" | "IN_GAME" | "ENDED"
+  hostIsPlayer       Boolean  @default(true)
   roundDuration      Int      @default(80)
   totalRounds        Int      @default(8)
   currentRoundNumber Int      @default(0)

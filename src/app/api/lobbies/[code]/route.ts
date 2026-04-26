@@ -6,6 +6,7 @@ import {
   revealRoundView,
   tickLobby,
 } from "@/lib/lobbyFlow";
+import { checkRate, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import type {
   LobbyMode,
   LobbyState,
@@ -53,6 +54,8 @@ export async function GET(_req: Request, { params }: Ctx) {
   const me = ownerId
     ? lobby.members.find((m) => m.userId === ownerId) ?? null
     : null;
+  const isPlayer = (m: { isHost: boolean }) =>
+    lobby.hostIsPlayer || !m.isHost;
 
   let setName: string | null = null;
   if (lobby.setId) {
@@ -81,6 +84,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     | null = null;
   if (lobby.status === "ENDED") {
     finalScores = [...lobby.members]
+      .filter(isPlayer)
       .sort((a, b) => b.score - a.score)
       .map((m) => ({ id: m.id, displayName: m.displayName, score: m.score }));
   }
@@ -91,17 +95,20 @@ export async function GET(_req: Request, { params }: Ctx) {
     mode: lobby.mode as LobbyMode,
     status: lobby.status as LobbyStatus,
     hasPassword: Boolean(lobby.passwordHash),
+    hostIsPlayer: lobby.hostIsPlayer,
     setId: lobby.setId,
     setName,
     roundDuration: lobby.roundDuration,
     totalRounds: lobby.totalRounds,
     currentRoundNumber: lobby.currentRoundNumber,
     memberCount: lobby.members.length,
+    activePlayerCount: lobby.members.filter(isPlayer).length,
     members: lobby.members.map((m) => ({
       id: m.id,
       displayName: m.displayName,
       score: m.score,
       isHost: m.isHost,
+      isPlayer: isPlayer(m),
       isMe: me?.id === m.id,
       joinedAt: m.joinedAt.toISOString(),
     })),
@@ -111,6 +118,7 @@ export async function GET(_req: Request, { params }: Ctx) {
           displayName: me.displayName,
           score: me.score,
           isHost: me.isHost,
+          isPlayer: isPlayer(me),
           isMe: true,
           joinedAt: me.joinedAt.toISOString(),
         }
@@ -135,4 +143,64 @@ export async function GET(_req: Request, { params }: Ctx) {
   };
 
   return Response.json(state);
+}
+
+export async function PATCH(request: Request, { params }: Ctx) {
+  const rate = checkRate(clientKey(request, "lobby-settings"), 30, 60_000);
+  if (!rate.allowed) return tooManyRequests(rate.resetInMs);
+
+  const { code: raw } = await params;
+  const code = normalizeLobbyCode(raw);
+  if (!isValidLobbyCode(code)) {
+    return Response.json({ error: "Invalid lobby code" }, { status: 400 });
+  }
+
+  let body: { hostIsPlayer?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  if (typeof body.hostIsPlayer !== "boolean") {
+    return Response.json(
+      { error: "hostIsPlayer must be a boolean" },
+      { status: 400 }
+    );
+  }
+
+  const ownerId = await getOwnerId();
+  if (!ownerId) {
+    return Response.json({ error: "Not a member" }, { status: 403 });
+  }
+
+  const lobby = await prisma.lobby.findUnique({
+    where: { code },
+    include: { members: true },
+  });
+  if (!lobby) {
+    return Response.json({ error: "Lobby not found" }, { status: 404 });
+  }
+  const me = lobby.members.find((m) => m.userId === ownerId);
+  if (!me || !me.isHost) {
+    return Response.json(
+      { error: "Only the host can update lobby settings." },
+      { status: 403 }
+    );
+  }
+  if (lobby.status !== "WAITING") {
+    return Response.json(
+      { error: "Lobby settings can only be changed before the game starts." },
+      { status: 409 }
+    );
+  }
+
+  const updated = await prisma.lobby.update({
+    where: { id: lobby.id },
+    data: { hostIsPlayer: body.hostIsPlayer },
+  });
+
+  return Response.json({
+    ok: true,
+    hostIsPlayer: updated.hostIsPlayer,
+  });
 }
